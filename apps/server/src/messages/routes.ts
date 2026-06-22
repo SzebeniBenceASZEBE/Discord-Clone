@@ -3,12 +3,13 @@ import type { DatabaseSync } from 'node:sqlite';
 import type { SendMessageRequest } from '@dc/shared';
 import { makeRequireAuth } from '../auth/guard.ts';
 import { getChannel, isMember } from '../communities/store.ts';
+import type { Hub } from '../realtime/hub.ts';
 import { listMessages, sendMessage } from './store.ts';
 
 const MAX_LENGTH = 4000;
 
-export function messageRoutes(opts: { db: DatabaseSync }) {
-  const { db } = opts;
+export function messageRoutes(opts: { db: DatabaseSync; hub: Hub }) {
+  const { db, hub } = opts;
   const requireAuth = makeRequireAuth(db);
 
   return async function (app: FastifyInstance): Promise<void> {
@@ -25,7 +26,10 @@ export function messageRoutes(opts: { db: DatabaseSync }) {
       if (!content) return reply.code(400).send({ error: 'message is empty' });
       if (content.length > MAX_LENGTH) return reply.code(400).send({ error: `message too long (max ${MAX_LENGTH})` });
 
-      return reply.code(201).send(sendMessage(db, channelId, req.user!.id, content));
+      const message = sendMessage(db, channelId, req.user!.id, content);
+      // Push it live to everyone watching this channel.
+      hub.broadcast(channelId, { type: 'message.created', message });
+      return reply.code(201).send(message);
     });
 
     // GET /api/channels/:channelId/messages?limit=50&before=<seq> — history.

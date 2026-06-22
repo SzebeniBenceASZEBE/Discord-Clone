@@ -3,11 +3,13 @@ import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
 import websocket from '@fastify/websocket';
-import type { ServerEvent } from '@dc/shared';
+import type { ClientEvent, ServerEvent } from '@dc/shared';
 import { openDatabase } from './db.ts';
 import { authRoutes } from './auth/routes.ts';
 import { communityRoutes } from './communities/routes.ts';
+import { getChannel, isMember } from './communities/store.ts';
 import { messageRoutes } from './messages/routes.ts';
+import { Hub } from './realtime/hub.ts';
 import { csrfGuard } from './auth/guard.ts';
 import { COOKIE_NAME, getSessionUser } from './auth/sessions.ts';
 
@@ -25,6 +27,7 @@ const APP_URL = process.env.APP_URL ?? 'http://localhost:5173';
 const cookieSecure = process.env.NODE_ENV === 'production';
 
 const db = openDatabase(DATA_DIR);
+const hub = new Hub();
 
 const app = Fastify({ logger: true });
 
@@ -46,13 +49,14 @@ await app.register(authRoutes({ db, cookieSecure, appUrl: APP_URL }));
 await app.register(communityRoutes({ db }));
 
 // Messages: /api/channels/:id/messages
-await app.register(messageRoutes({ db }));
+await app.register(messageRoutes({ db, hub }));
 
 if (!process.env.MASTER_KEY) {
   app.log.warn('MASTER_KEY is not set — sending/reading messages will fail until it is configured in .env');
 }
 
-// Realtime channel — now authenticated via the same session cookie.
+// Realtime channel — authenticated via the session cookie. Clients subscribe to
+// channels they belong to; the message route fans new messages out through the hub.
 app.register(async (instance) => {
   instance.get('/ws', { websocket: true }, (socket, req) => {
     const user = getSessionUser(db, req.cookies[COOKIE_NAME]);
@@ -60,12 +64,32 @@ app.register(async (instance) => {
       socket.close(1008, 'unauthorized'); // 1008 = policy violation
       return;
     }
+
+    const conn = { userId: user.id, subs: new Set<string>(), send: (d: string) => socket.send(d) };
+    const remove = hub.add(conn);
+
     const hello: ServerEvent = { type: 'hello', userId: user.id, serverTime: Date.now() };
     socket.send(JSON.stringify(hello));
 
     socket.on('message', (raw: Buffer) => {
-      app.log.info({ from: user.id, raw: raw.toString() }, 'ws message received');
+      let event: ClientEvent;
+      try {
+        event = JSON.parse(raw.toString()) as ClientEvent;
+      } catch {
+        return; // ignore malformed frames
+      }
+      if (event.type === 'subscribe') {
+        // Only let a client watch a channel in a community it belongs to.
+        const channel = getChannel(db, event.conversationId);
+        if (channel && isMember(db, channel.communityId, user.id)) {
+          conn.subs.add(event.conversationId);
+        }
+      } else if (event.type === 'unsubscribe') {
+        conn.subs.delete(event.conversationId);
+      }
     });
+
+    socket.on('close', () => remove());
   });
 });
 
