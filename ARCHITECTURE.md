@@ -53,7 +53,8 @@ Auth request flow: `index.ts → auth/guard → auth/routes → (passwords / ses
 - `src/messages/access.ts` — resolves who may read/write a conversation (channel = membership, DM = participant).
 - `src/messages/routes.ts` — `/api/conversations/:id/messages` send/list for channels AND DMs; broadcasts via the hub.
 - `src/dm/store.ts` + `src/dm/routes.ts` — 1:1 DMs: `/api/users`, `/api/dms` (open/list); a DM is just a conversation.
-- `src/crypto.ts` — AES-256-GCM at-rest encryption keyed by `MASTER_KEY`.
+- `src/files/store.ts` + `src/files/routes.ts` — attachments: streamed encrypted upload to `DATA_DIR/files`, access-checked download, linked to messages.
+- `src/crypto.ts` — AES-256-GCM at-rest encryption keyed by `MASTER_KEY` (string helpers + streaming file helpers).
 - `src/realtime/hub.ts` — in-memory registry of WebSocket connections + their channel subscriptions; `broadcast` pushes a message to watchers.
 - `.env.example` — template for secrets/config (port, data dir, at-rest `MASTER_KEY`). Copied to gitignored `.env`.
 - `package.json` / `tsconfig.json` — server deps (Fastify, cookie, rate-limit) + scripts.
