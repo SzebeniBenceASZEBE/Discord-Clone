@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
-import type { Channel, Message } from '@dc/shared';
+import type { Message } from '@dc/shared';
 import { api } from '../api.ts';
 import { theme } from '../theme.ts';
 import { useSocket } from '../socket/SocketContext.tsx';
@@ -9,32 +9,35 @@ function formatTime(ms: number): string {
   return new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-export function ChatView({ channel }: { channel: Channel }) {
+/**
+ * Shows one conversation — a channel OR a DM, they're the same on the wire.
+ * Loads history over REST, then stays live via the shared WebSocket. The shell
+ * renders the header/title; this owns the message list and composer.
+ */
+export function ChatView({ conversationId, composerPlaceholder, emptyLabel }: { conversationId: string; composerPlaceholder: string; emptyLabel: string }) {
   const { subscribe, unsubscribe, onMessageCreated } = useSocket();
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  // Load history + go live whenever the open channel changes.
   useEffect(() => {
     let active = true;
     setMessages([]);
-    api.get<Message[]>(`/api/conversations/${channel.id}/messages`).then((history) => {
+    api.get<Message[]>(`/api/conversations/${conversationId}/messages`).then((history) => {
       if (active) setMessages(history);
     });
-    subscribe(channel.id);
+    subscribe(conversationId);
     const off = onMessageCreated((msg) => {
-      if (msg.conversationId !== channel.id) return;
+      if (msg.conversationId !== conversationId) return;
       setMessages((prev) => (prev.some((p) => p.id === msg.id) ? prev : [...prev, msg]));
     });
     return () => {
       active = false;
-      unsubscribe(channel.id);
+      unsubscribe(conversationId);
       off();
     };
-  }, [channel.id, subscribe, unsubscribe, onMessageCreated]);
+  }, [conversationId, subscribe, unsubscribe, onMessageCreated]);
 
-  // Keep the newest message in view.
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
@@ -44,15 +47,14 @@ export function ChatView({ channel }: { channel: Channel }) {
     const content = text.trim();
     if (!content) return;
     setText('');
-    // The message comes back to us via the WebSocket broadcast, which appends it.
-    await api.post(`/api/conversations/${channel.id}/messages`, { content });
+    await api.post(`/api/conversations/${conversationId}/messages`, { content });
   }
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}>
       <div style={{ flex: 1, overflowY: 'auto', padding: '16px 16px 8px', minHeight: 0 }} className="scrollthin">
         {messages.length === 0 ? (
-          <div style={{ color: theme.textMuted, padding: '8px 0' }}>This is the start of #{channel.name}. Say hi!</div>
+          <div style={{ color: theme.textMuted, padding: '8px 0' }}>{emptyLabel}</div>
         ) : (
           messages.map((m) => (
             <div key={m.id} style={{ padding: '4px 0' }}>
@@ -66,14 +68,7 @@ export function ChatView({ channel }: { channel: Channel }) {
       </div>
 
       <form onSubmit={send} style={{ flex: 'none', padding: '0 16px 16px', display: 'flex', gap: 8 }}>
-        <input
-          className="auth-input"
-          style={{ flex: 1 }}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder={`Message #${channel.name}`}
-          aria-label={`Message #${channel.name}`}
-        />
+        <input className="auth-input" style={{ flex: 1 }} value={text} onChange={(e) => setText(e.target.value)} placeholder={composerPlaceholder} aria-label={composerPlaceholder} />
         <button type="submit" style={{ background: theme.blurple, border: 'none', color: '#fff', borderRadius: 4, padding: '0 16px', fontSize: 14, fontWeight: 500, cursor: 'pointer' }}>
           Send
         </button>
