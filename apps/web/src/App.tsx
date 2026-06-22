@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { theme } from './theme.ts';
 import { AuthProvider, useAuth } from './auth/AuthContext.tsx';
 import { SocketProvider } from './socket/SocketContext.tsx';
+import { VoiceProvider } from './voice/VoiceContext.tsx';
 import { Login } from './pages/Login.tsx';
 import { Register } from './pages/Register.tsx';
 import { JoinServer } from './pages/JoinServer.tsx';
@@ -20,7 +21,9 @@ function Protected() {
   if (!user) return <Navigate to="/login" replace />;
   return (
     <SocketProvider>
-      <AppShell />
+      <VoiceProvider>
+        <AppShell />
+      </VoiceProvider>
     </SocketProvider>
   );
 }

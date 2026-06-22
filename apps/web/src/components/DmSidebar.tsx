@@ -2,6 +2,7 @@ import type { DmSummary, PresenceStatus, UserSummary } from '@dc/shared';
 import { theme, layout } from '../theme.ts';
 import { Avatar } from './Avatar.tsx';
 import { UserPanel } from './UserPanel.tsx';
+import { VoicePanel } from '../voice/VoicePanel.tsx';
 
 function PersonRow({ id, name, status, selected, onClick }: { id: string; name: string; status: PresenceStatus; selected: boolean; onClick: () => void }) {
   return (
@@ -50,6 +51,7 @@ export function DmSidebar({
           <div style={{ color: theme.textMuted, fontSize: 13, padding: 8 }}>No one else has an account yet. Invite a friend!</div>
         )}
       </div>
+      <VoicePanel />
       <UserPanel />
     </aside>
   );

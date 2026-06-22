@@ -9,7 +9,7 @@ import { DmSidebar } from './components/DmSidebar.tsx';
 import { ActiveNow } from './components/ActiveNow.tsx';
 import { ChannelList } from './chat/ChannelList.tsx';
 import { ChatView } from './chat/ChatView.tsx';
-import { VoiceCall } from './voice/VoiceCall.tsx';
+import { VoiceStage } from './voice/VoiceStage.tsx';
 import { CreateServerModal } from './components/CreateServerModal.tsx';
 
 /**
@@ -178,7 +178,7 @@ export function AppShell() {
         )}
 
         {voiceChannel ? (
-          <VoiceCall channel={voiceChannel} onLeave={() => setSelectedChannelId(channels.find((c) => c.kind === 'text')?.id ?? null)} />
+          <VoiceStage channel={voiceChannel} />
         ) : active ? (
           <ChatView conversationId={active.id} composerPlaceholder={active.placeholder} emptyLabel={active.empty} />
         ) : (
