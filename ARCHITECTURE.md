@@ -2,7 +2,7 @@
 
 A file-by-file map of the project. Kept current at the end of each build phase.
 
-**Status:** auth, messaging (servers + channels), 1:1 DMs, per-server invite links, and a default "everyone" server are all working. Messages, channels, and DMs share one "conversation" engine. Next: file/image sharing, then voice/screen via LiveKit.
+**Status:** auth, messaging (servers + channels), 1:1 DMs, per-server invite links, a default "everyone" server, and encrypted file/image sharing are all working. Messages, channels, and DMs share one "conversation" engine. Next: voice + screen share via LiveKit (the VPS piece).
 
 ## Shape
 
