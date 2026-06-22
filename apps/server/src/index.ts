@@ -10,6 +10,7 @@ import { COOKIE_NAME, getSessionUser } from './auth/sessions.ts';
 
 const PORT = Number(process.env.PORT ?? 3001);
 const DATA_DIR = process.env.DATA_DIR ?? './data';
+const APP_URL = process.env.APP_URL ?? 'http://localhost:5173';
 const cookieSecure = process.env.NODE_ENV === 'production';
 
 const db = openDatabase(DATA_DIR);
@@ -28,7 +29,7 @@ app.addHook('onRequest', csrfGuard);
 app.get('/api/health', async () => ({ ok: true, time: Date.now() }));
 
 // Auth: /api/auth/login, /logout, /me.
-await app.register(authRoutes({ db, cookieSecure }));
+await app.register(authRoutes({ db, cookieSecure, appUrl: APP_URL }));
 
 // Realtime channel — now authenticated via the same session cookie.
 app.register(async (instance) => {

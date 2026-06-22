@@ -102,3 +102,32 @@ export interface LoginRequest {
   username: string;
   password: string;
 }
+
+/** Body of POST /api/auth/register (joining via an invite link). */
+export interface RegisterRequest {
+  inviteToken: string;
+  username: string;
+  displayName: string;
+  password: string;
+}
+
+/** Result of GET /api/invites/:token — is this link usable? */
+export interface InviteInfo {
+  valid: boolean;
+  reason?: 'unknown' | 'used' | 'expired';
+}
+
+/** Returned to the admin when minting an invite (POST /api/invites). */
+export interface CreatedInvite {
+  token: string;
+  url: string;
+  expiresAt: UnixMillis | null;
+}
+
+/** Admin's view of an outstanding invite (GET /api/invites). No token. */
+export interface InviteSummary {
+  id: Id;
+  createdAt: UnixMillis;
+  expiresAt: UnixMillis | null;
+  consumed: boolean;
+}
