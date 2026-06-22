@@ -1,6 +1,7 @@
 import process from 'node:process';
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
+import multipart from '@fastify/multipart';
 import rateLimit from '@fastify/rate-limit';
 import websocket from '@fastify/websocket';
 import type { ClientEvent, ServerEvent } from '@dc/shared';
@@ -11,6 +12,7 @@ import { ensureDefaults } from './communities/store.ts';
 import { messageRoutes } from './messages/routes.ts';
 import { resolveAccess } from './messages/access.ts';
 import { dmRoutes } from './dm/routes.ts';
+import { fileRoutes } from './files/routes.ts';
 import { Hub } from './realtime/hub.ts';
 import { csrfGuard } from './auth/guard.ts';
 import { COOKIE_NAME, getSessionUser } from './auth/sessions.ts';
@@ -38,6 +40,7 @@ const app = Fastify({ logger: true });
 await app.register(cookie);
 await app.register(rateLimit, { global: false }); // opt-in per route
 await app.register(websocket);
+await app.register(multipart, { limits: { fileSize: 100 * 1024 * 1024, files: 1 } }); // 100 MB cap for now
 
 // CSRF check on every state-changing request.
 app.addHook('onRequest', csrfGuard);
@@ -56,6 +59,9 @@ await app.register(messageRoutes({ db, hub }));
 
 // Direct messages: /api/users, /api/dms
 await app.register(dmRoutes({ db, hub }));
+
+// File attachments: upload to a conversation, download by id
+await app.register(fileRoutes({ db, dataDir: DATA_DIR }));
 
 if (!process.env.MASTER_KEY) {
   app.log.warn('MASTER_KEY is not set — sending/reading messages will fail until it is configured in .env');

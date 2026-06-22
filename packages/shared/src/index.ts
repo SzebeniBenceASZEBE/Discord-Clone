@@ -187,7 +187,9 @@ export interface ServerInviteInfo {
   alreadyMember?: boolean;
 }
 
-/** Body of POST /api/channels/:channelId/messages. */
+/** Body of POST /api/conversations/:id/messages. */
 export interface SendMessageRequest {
   content: string;
+  /** Ids of files already uploaded to this conversation to attach. */
+  attachmentIds?: Id[];
 }

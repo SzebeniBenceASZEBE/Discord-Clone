@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import type { Message } from '@dc/shared';
 import { decryptAtRest, encryptAtRest } from '../crypto.ts';
+import { getAttachmentsForMessages } from '../files/store.ts';
 
 /**
  * Data layer for chat messages. A message belongs to a "conversation" — either
@@ -64,5 +65,9 @@ export function listMessages(db: DatabaseSync, conversationId: string, limit: nu
       ? db.prepare(`SELECT ${cols} FROM messages m JOIN users u ON u.id = m.author_id WHERE m.conversation_id = ? AND m.seq < ? ORDER BY m.seq DESC LIMIT ?`).all(conversationId, before, limit)
       : db.prepare(`SELECT ${cols} FROM messages m JOIN users u ON u.id = m.author_id WHERE m.conversation_id = ? ORDER BY m.seq DESC LIMIT ?`).all(conversationId, limit)
   ) as unknown as MessageRow[];
-  return rows.reverse().map((r) => rowToMessage(conversationId, r));
+  const messages = rows.reverse().map((r) => rowToMessage(conversationId, r));
+  // Attach any files belonging to these messages.
+  const attachments = getAttachmentsForMessages(db, messages.map((m) => m.id));
+  for (const m of messages) m.attachments = attachments.get(m.id) ?? [];
+  return messages;
 }

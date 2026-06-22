@@ -145,5 +145,23 @@ function bootstrap(db: DatabaseSync): void {
     );
 
     CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id, seq);
+
+    -- File attachments. The bytes live encrypted on disk (DATA_DIR/files/<id>);
+    -- this table holds metadata + the per-file nonce and GCM auth tag needed to
+    -- decrypt. message_id is NULL between upload and the message being sent.
+    CREATE TABLE IF NOT EXISTS attachments (
+      id               TEXT PRIMARY KEY,
+      conversation_id  TEXT NOT NULL,
+      message_id       TEXT REFERENCES messages(id) ON DELETE CASCADE,
+      uploader_id      TEXT NOT NULL REFERENCES users(id),
+      filename         TEXT NOT NULL,
+      mime             TEXT NOT NULL,
+      size             INTEGER NOT NULL,
+      nonce            TEXT NOT NULL,
+      tag              TEXT NOT NULL,
+      created_at       INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_attachments_message ON attachments(message_id);
   `);
 }

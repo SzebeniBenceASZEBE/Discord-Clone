@@ -1,4 +1,5 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
+import type { CipherGCM, DecipherGCM } from 'node:crypto';
 
 /**
  * At-rest encryption for message/file content (the "encrypted blobs in SQLite"
@@ -26,6 +27,22 @@ export function encryptAtRest(plaintext: string): { nonce: string; ciphertext: s
   const enc = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
   const tag = cipher.getAuthTag();
   return { nonce: iv.toString('base64'), ciphertext: Buffer.concat([enc, tag]).toString('base64') };
+}
+
+/**
+ * Streaming variants for files — pipe a file stream through these instead of
+ * holding the whole thing in memory. The caller stores the returned nonce, and
+ * (after the stream finishes) the cipher's auth tag, in the database.
+ */
+export function createFileEncryptor(): { nonce: Buffer; cipher: CipherGCM } {
+  const nonce = randomBytes(12);
+  return { nonce, cipher: createCipheriv('aes-256-gcm', getKey(), nonce) as CipherGCM };
+}
+
+export function createFileDecryptor(nonce: Buffer, tag: Buffer): DecipherGCM {
+  const decipher = createDecipheriv('aes-256-gcm', getKey(), nonce) as DecipherGCM;
+  decipher.setAuthTag(tag);
+  return decipher;
 }
 
 /** Reverse of encryptAtRest. Throws if the data was tampered with. */
