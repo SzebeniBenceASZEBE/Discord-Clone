@@ -25,7 +25,6 @@ export function ChannelList({
       <div
         key={c.id}
         onClick={interactive ? () => onSelectChannel(c.id) : undefined}
-        title={interactive ? undefined : 'Voice channels come with the voice/screen-share phase'}
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -56,7 +55,7 @@ export function ChannelList({
         <div style={{ padding: '4px 8px', color: theme.textMuted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.4px' }}>Text</div>
         {text.map((c) => row(c, true))}
         <div style={{ padding: '12px 8px 4px', color: theme.textMuted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.4px' }}>Voice</div>
-        {voice.map((c) => row(c, false))}
+        {voice.map((c) => row(c, true))}
       </div>
       <UserPanel />
     </aside>

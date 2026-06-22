@@ -195,3 +195,11 @@ export interface SendMessageRequest {
   /** Ids of files already uploaded to this conversation to attach. */
   attachmentIds?: Id[];
 }
+
+/** Returned by the voice-token endpoint: where to connect + the join ticket. */
+export interface VoiceTokenResponse {
+  /** LiveKit server URL (ws://localhost:7880 in dev, wss://sfu… in prod). */
+  url: string;
+  /** Short-lived signed token authorizing this user to join the room. */
+  token: string;
+}

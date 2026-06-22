@@ -9,6 +9,7 @@ import { DmSidebar } from './components/DmSidebar.tsx';
 import { ActiveNow } from './components/ActiveNow.tsx';
 import { ChannelList } from './chat/ChannelList.tsx';
 import { ChatView } from './chat/ChatView.tsx';
+import { VoiceCall } from './voice/VoiceCall.tsx';
 import { CreateServerModal } from './components/CreateServerModal.tsx';
 
 /**
@@ -118,9 +119,12 @@ export function AppShell() {
     setCopied(true);
   }
 
-  // The conversation currently open in the main pane (channel or DM).
+  // A selected voice channel opens the call view instead of a text conversation.
+  const voiceChannel = selectedCommunity && selectedChannel?.kind === 'voice' ? selectedChannel : null;
+
+  // The text conversation currently open in the main pane (channel or DM).
   const active = selectedCommunity
-    ? selectedChannel
+    ? selectedChannel?.kind === 'text'
       ? { id: selectedChannel.id, title: `# ${selectedChannel.name}`, placeholder: `Message #${selectedChannel.name}`, empty: `This is the start of #${selectedChannel.name}. Say hi!` }
       : null
     : selectedDm
@@ -151,7 +155,7 @@ export function AppShell() {
 
       <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         <header style={{ height: 48, flex: 'none', display: 'flex', alignItems: 'center', gap: 12, padding: '0 16px', boxShadow: '0 1px 0 rgba(0,0,0,.2)', fontWeight: 600 }}>
-          {active ? active.title : 'Friends'}
+          {voiceChannel ? `🔊 ${voiceChannel.name}` : active ? active.title : 'Friends'}
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
             {user?.isAdmin && (
               <button onClick={makeInvite} disabled={inviteBusy} style={{ background: theme.blurple, border: 'none', color: '#fff', borderRadius: 4, padding: '7px 14px', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
@@ -173,7 +177,9 @@ export function AppShell() {
           </div>
         )}
 
-        {active ? (
+        {voiceChannel ? (
+          <VoiceCall channel={voiceChannel} onLeave={() => setSelectedChannelId(channels.find((c) => c.kind === 'text')?.id ?? null)} />
+        ) : active ? (
           <ChatView conversationId={active.id} composerPlaceholder={active.placeholder} emptyLabel={active.empty} />
         ) : (
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.textMuted, textAlign: 'center', padding: 24 }}>

@@ -13,6 +13,7 @@ import { messageRoutes } from './messages/routes.ts';
 import { resolveAccess } from './messages/access.ts';
 import { dmRoutes } from './dm/routes.ts';
 import { fileRoutes } from './files/routes.ts';
+import { voiceRoutes } from './voice/routes.ts';
 import { Hub } from './realtime/hub.ts';
 import { csrfGuard } from './auth/guard.ts';
 import { COOKIE_NAME, getSessionUser } from './auth/sessions.ts';
@@ -29,6 +30,12 @@ const PORT = Number(process.env.PORT ?? 3001);
 const DATA_DIR = process.env.DATA_DIR ?? './data';
 const APP_URL = process.env.APP_URL ?? 'http://localhost:5173';
 const cookieSecure = process.env.NODE_ENV === 'production';
+
+// LiveKit (voice/screen). Defaults match `livekit-server --dev`, so local dev
+// works with no extra config. Production sets these to the VPS values.
+const LIVEKIT_URL = process.env.LIVEKIT_URL ?? 'ws://localhost:7880';
+const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY ?? 'devkey';
+const LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET ?? 'secret';
 
 const db = openDatabase(DATA_DIR);
 ensureDefaults(db); // seed/keep the default "everyone" server membership
@@ -62,6 +69,9 @@ await app.register(dmRoutes({ db, hub }));
 
 // File attachments: upload to a conversation, download by id
 await app.register(fileRoutes({ db, dataDir: DATA_DIR }));
+
+// Voice: mint a LiveKit join token for a voice channel
+await app.register(voiceRoutes({ db, livekitUrl: LIVEKIT_URL, apiKey: LIVEKIT_API_KEY, apiSecret: LIVEKIT_API_SECRET }));
 
 if (!process.env.MASTER_KEY) {
   app.log.warn('MASTER_KEY is not set — sending/reading messages will fail until it is configured in .env');
