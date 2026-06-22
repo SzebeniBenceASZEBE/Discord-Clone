@@ -131,3 +131,22 @@ export interface InviteSummary {
   expiresAt: UnixMillis | null;
   consumed: boolean;
 }
+
+// --- Communities & channels ---
+
+/** Body of POST /api/communities. */
+export interface CreateCommunityRequest {
+  name: string;
+}
+
+/** Returned when a community is created (the server + its starter channel). */
+export interface CreatedCommunity {
+  community: Community;
+  channels: Channel[];
+}
+
+/** Body of POST /api/communities/:id/channels. */
+export interface CreateChannelRequest {
+  name: string;
+  kind: ChannelKind;
+}

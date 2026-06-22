@@ -61,5 +61,37 @@ function bootstrap(db: DatabaseSync): void {
       consumed_by  TEXT REFERENCES users(id),
       consumed_at  INTEGER
     );
+
+    -- A "server" in Discord terms: a community of channels.
+    CREATE TABLE IF NOT EXISTS communities (
+      id          TEXT PRIMARY KEY,
+      name        TEXT NOT NULL,
+      label       TEXT NOT NULL,   -- short initials shown on the rail
+      color       TEXT NOT NULL,   -- rail icon color
+      owner_id    TEXT NOT NULL REFERENCES users(id),
+      created_at  INTEGER NOT NULL
+    );
+
+    -- Who belongs to which community (and their role within it).
+    CREATE TABLE IF NOT EXISTS community_members (
+      community_id  TEXT NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
+      user_id       TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      role          TEXT NOT NULL DEFAULT 'member',  -- 'owner' | 'member'
+      joined_at     INTEGER NOT NULL,
+      PRIMARY KEY (community_id, user_id)
+    );
+
+    -- Text/voice channels inside a community.
+    CREATE TABLE IF NOT EXISTS channels (
+      id            TEXT PRIMARY KEY,
+      community_id  TEXT NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
+      kind          TEXT NOT NULL,   -- 'text' | 'voice'
+      name          TEXT NOT NULL,
+      position      INTEGER NOT NULL,
+      created_at    INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_channels_community ON channels(community_id);
+    CREATE INDEX IF NOT EXISTS idx_members_user ON community_members(user_id);
   `);
 }

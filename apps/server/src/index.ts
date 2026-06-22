@@ -5,6 +5,7 @@ import websocket from '@fastify/websocket';
 import type { ServerEvent } from '@dc/shared';
 import { openDatabase } from './db.ts';
 import { authRoutes } from './auth/routes.ts';
+import { communityRoutes } from './communities/routes.ts';
 import { csrfGuard } from './auth/guard.ts';
 import { COOKIE_NAME, getSessionUser } from './auth/sessions.ts';
 
@@ -30,6 +31,9 @@ app.get('/api/health', async () => ({ ok: true, time: Date.now() }));
 
 // Auth: /api/auth/login, /logout, /me.
 await app.register(authRoutes({ db, cookieSecure, appUrl: APP_URL }));
+
+// Communities + channels: /api/communities…
+await app.register(communityRoutes({ db }));
 
 // Realtime channel — now authenticated via the same session cookie.
 app.register(async (instance) => {
