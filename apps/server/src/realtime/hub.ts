@@ -27,6 +27,14 @@ export class Hub {
     };
   }
 
+  /** Is this user connected right now (on any device)? Used for presence. */
+  isOnline(userId: string): boolean {
+    for (const conn of this.connections) {
+      if (conn.userId === userId) return true;
+    }
+    return false;
+  }
+
   /** Push an event to every connection watching `channelId`. */
   broadcast(channelId: string, event: ServerEvent): void {
     const data = JSON.stringify(event);

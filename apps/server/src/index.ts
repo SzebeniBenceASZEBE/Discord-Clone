@@ -7,8 +7,9 @@ import type { ClientEvent, ServerEvent } from '@dc/shared';
 import { openDatabase } from './db.ts';
 import { authRoutes } from './auth/routes.ts';
 import { communityRoutes } from './communities/routes.ts';
-import { getChannel, isMember } from './communities/store.ts';
 import { messageRoutes } from './messages/routes.ts';
+import { resolveAccess } from './messages/access.ts';
+import { dmRoutes } from './dm/routes.ts';
 import { Hub } from './realtime/hub.ts';
 import { csrfGuard } from './auth/guard.ts';
 import { COOKIE_NAME, getSessionUser } from './auth/sessions.ts';
@@ -48,8 +49,11 @@ await app.register(authRoutes({ db, cookieSecure, appUrl: APP_URL }));
 // Communities + channels: /api/communities…
 await app.register(communityRoutes({ db }));
 
-// Messages: /api/channels/:id/messages
+// Messages (channels + DMs): /api/conversations/:id/messages
 await app.register(messageRoutes({ db, hub }));
+
+// Direct messages: /api/users, /api/dms
+await app.register(dmRoutes({ db, hub }));
 
 if (!process.env.MASTER_KEY) {
   app.log.warn('MASTER_KEY is not set — sending/reading messages will fail until it is configured in .env');
@@ -79,9 +83,8 @@ app.register(async (instance) => {
         return; // ignore malformed frames
       }
       if (event.type === 'subscribe') {
-        // Only let a client watch a channel in a community it belongs to.
-        const channel = getChannel(db, event.conversationId);
-        if (channel && isMember(db, channel.communityId, user.id)) {
+        // Only let a client watch a conversation it's allowed to access.
+        if (resolveAccess(db, event.conversationId, user.id).ok) {
           conn.subs.add(event.conversationId);
         }
       } else if (event.type === 'unsubscribe') {

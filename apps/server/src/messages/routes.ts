@@ -2,8 +2,8 @@ import type { FastifyInstance } from 'fastify';
 import type { DatabaseSync } from 'node:sqlite';
 import type { SendMessageRequest } from '@dc/shared';
 import { makeRequireAuth } from '../auth/guard.ts';
-import { getChannel, isMember } from '../communities/store.ts';
 import type { Hub } from '../realtime/hub.ts';
+import { resolveAccess } from './access.ts';
 import { listMessages, sendMessage } from './store.ts';
 
 const MAX_LENGTH = 4000;
@@ -13,36 +13,35 @@ export function messageRoutes(opts: { db: DatabaseSync; hub: Hub }) {
   const requireAuth = makeRequireAuth(db);
 
   return async function (app: FastifyInstance): Promise<void> {
-    // POST /api/channels/:channelId/messages — post a message to a text channel.
-    app.post('/api/channels/:channelId/messages', { preHandler: requireAuth }, async (req, reply) => {
-      const { channelId } = req.params as { channelId: string };
-      const channel = getChannel(db, channelId);
-      if (!channel) return reply.code(404).send({ error: 'channel not found' });
-      if (!isMember(db, channel.communityId, req.user!.id)) return reply.code(403).send({ error: 'not a member' });
-      if (channel.kind !== 'text') return reply.code(400).send({ error: 'messages can only be sent to text channels' });
+    // POST /api/conversations/:id/messages — post to a channel or a DM.
+    app.post('/api/conversations/:id/messages', { preHandler: requireAuth }, async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const access = resolveAccess(db, id, req.user!.id);
+      if (!access.ok) return reply.code(access.reason === 'notfound' ? 404 : 403).send({ error: access.reason });
+      if (access.kind === 'channel' && access.channel.kind !== 'text') {
+        return reply.code(400).send({ error: 'messages can only be sent to text channels' });
+      }
 
       const body = (req.body ?? {}) as Partial<SendMessageRequest>;
       const content = (body.content ?? '').trim();
       if (!content) return reply.code(400).send({ error: 'message is empty' });
       if (content.length > MAX_LENGTH) return reply.code(400).send({ error: `message too long (max ${MAX_LENGTH})` });
 
-      const message = sendMessage(db, channelId, req.user!.id, req.user!.displayName, content);
-      // Push it live to everyone watching this channel.
-      hub.broadcast(channelId, { type: 'message.created', message });
+      const message = sendMessage(db, id, req.user!.id, req.user!.displayName, content);
+      hub.broadcast(id, { type: 'message.created', message });
       return reply.code(201).send(message);
     });
 
-    // GET /api/channels/:channelId/messages?limit=50&before=<seq> — history.
-    app.get('/api/channels/:channelId/messages', { preHandler: requireAuth }, async (req, reply) => {
-      const { channelId } = req.params as { channelId: string };
-      const channel = getChannel(db, channelId);
-      if (!channel) return reply.code(404).send({ error: 'channel not found' });
-      if (!isMember(db, channel.communityId, req.user!.id)) return reply.code(403).send({ error: 'not a member' });
+    // GET /api/conversations/:id/messages?limit=50&before=<seq> — history.
+    app.get('/api/conversations/:id/messages', { preHandler: requireAuth }, async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const access = resolveAccess(db, id, req.user!.id);
+      if (!access.ok) return reply.code(access.reason === 'notfound' ? 404 : 403).send({ error: access.reason });
 
       const q = req.query as { limit?: string; before?: string };
       const limit = Math.min(Math.max(Number(q.limit) || 50, 1), 100);
       const before = q.before ? Number(q.before) : undefined;
-      return listMessages(db, channelId, limit, before);
+      return listMessages(db, id, limit, before);
     });
   };
 }

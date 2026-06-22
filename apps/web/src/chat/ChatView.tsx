@@ -19,7 +19,7 @@ export function ChatView({ channel }: { channel: Channel }) {
   useEffect(() => {
     let active = true;
     setMessages([]);
-    api.get<Message[]>(`/api/channels/${channel.id}/messages`).then((history) => {
+    api.get<Message[]>(`/api/conversations/${channel.id}/messages`).then((history) => {
       if (active) setMessages(history);
     });
     subscribe(channel.id);
@@ -45,7 +45,7 @@ export function ChatView({ channel }: { channel: Channel }) {
     if (!content) return;
     setText('');
     // The message comes back to us via the WebSocket broadcast, which appends it.
-    await api.post(`/api/channels/${channel.id}/messages`, { content });
+    await api.post(`/api/conversations/${channel.id}/messages`, { content });
   }
 
   return (

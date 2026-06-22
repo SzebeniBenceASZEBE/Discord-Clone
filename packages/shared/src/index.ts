@@ -78,6 +78,25 @@ export interface DirectConversation {
   participants: [Id, Id];
 }
 
+/** A user as shown in lists (people to DM, member lists). No secrets. */
+export interface UserSummary {
+  id: Id;
+  username: string;
+  displayName: string;
+  status: PresenceStatus;
+}
+
+/** A DM in the sidebar: the conversation id plus the other person. */
+export interface DmSummary {
+  conversationId: Id;
+  otherUser: UserSummary;
+}
+
+/** Body of POST /api/dms — open (or reuse) a DM with this user. */
+export interface OpenDmRequest {
+  userId: Id;
+}
+
 /** Realtime events fanned out over the WebSocket. */
 export type ServerEvent =
   | { type: 'hello'; userId: Id; serverTime: UnixMillis }
