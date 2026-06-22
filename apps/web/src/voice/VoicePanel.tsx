@@ -49,8 +49,8 @@ export function VoicePanel() {
         <button onClick={() => voice.toggleMute()} style={{ flex: 1, background: voice.muted ? '#f23f43' : theme.sidebar, border: `1px solid ${theme.divider}`, color: '#fff', borderRadius: 4, padding: '6px 8px', fontSize: 12, cursor: 'pointer' }}>
           {voice.muted ? 'Unmute' : 'Mute'}
         </button>
-        <button disabled title="Screen share — next phase" style={{ flex: 1, background: theme.sidebar, border: `1px solid ${theme.divider}`, color: theme.textMuted, borderRadius: 4, padding: '6px 8px', fontSize: 12, cursor: 'not-allowed' }}>
-          Screen
+        <button onClick={() => voice.toggleScreen()} title="Share your screen" style={{ flex: 1, background: voice.screenSharing ? theme.green : theme.sidebar, border: `1px solid ${theme.divider}`, color: '#fff', borderRadius: 4, padding: '6px 8px', fontSize: 12, cursor: 'pointer' }}>
+          {voice.screenSharing ? 'Stop' : 'Screen'}
         </button>
       </div>
     </div>

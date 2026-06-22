@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Room, RoomEvent, Track } from 'livekit-client';
-import type { RemoteTrack } from 'livekit-client';
+import type { RemoteTrack, TrackPublication } from 'livekit-client';
 import type { Channel, VoiceTokenResponse } from '@dc/shared';
 import { api } from '../api.ts';
 
@@ -18,17 +18,30 @@ export interface VoiceMember {
   muted: boolean;
 }
 
+export interface ScreenShare {
+  identity: string;
+  name: string;
+  track: Track; // a screen-share video track to attach to a <video>
+}
+
 interface VoiceState {
   channelId: string | null;
   channelName: string | null;
   status: 'idle' | 'connecting' | 'connected' | 'error';
   error: string;
   members: VoiceMember[];
+  screens: ScreenShare[];
   muted: boolean;
+  screenSharing: boolean;
   joinedAt: number | null;
+  micDeviceId: string | undefined;
+  speakerDeviceId: string | undefined;
   join: (channel: Channel) => Promise<void>;
   leave: () => Promise<void>;
   toggleMute: () => Promise<void>;
+  toggleScreen: () => Promise<void>;
+  setMicDevice: (id: string) => Promise<void>;
+  setSpeakerDevice: (id: string) => Promise<void>;
 }
 
 const VoiceCtx = createContext<VoiceState | null>(null);
@@ -41,10 +54,13 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<VoiceState['status']>('idle');
   const [error, setError] = useState('');
   const [members, setMembers] = useState<VoiceMember[]>([]);
+  const [screens, setScreens] = useState<ScreenShare[]>([]);
   const [muted, setMuted] = useState(false);
+  const [screenSharing, setScreenSharing] = useState(false);
   const [joinedAt, setJoinedAt] = useState<number | null>(null);
+  const [micDeviceId, setMicDeviceId] = useState<string | undefined>(undefined);
+  const [speakerDeviceId, setSpeakerDeviceId] = useState<string | undefined>(undefined);
 
-  // If the app unmounts (e.g. logout) while in a call, don't leave a room open.
   useEffect(() => () => void roomRef.current?.disconnect(), []);
 
   function reset() {
@@ -52,7 +68,9 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     setChannelName(null);
     setStatus('idle');
     setMembers([]);
+    setScreens([]);
     setMuted(false);
+    setScreenSharing(false);
     setJoinedAt(null);
   }
 
@@ -60,6 +78,17 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     const refresh = () => {
       const all = [room.localParticipant, ...room.remoteParticipants.values()];
       setMembers(all.map((p) => ({ identity: p.identity, name: p.name || p.identity, speaking: p.isSpeaking, muted: !p.isMicrophoneEnabled })));
+
+      const shares: ScreenShare[] = [];
+      for (const p of all) {
+        for (const pub of p.trackPublications.values() as IterableIterator<TrackPublication>) {
+          if (pub.source === Track.Source.ScreenShare && pub.kind === Track.Kind.Video && pub.track) {
+            shares.push({ identity: p.identity, name: p.name || p.identity, track: pub.track });
+          }
+        }
+      }
+      setScreens(shares);
+      setScreenSharing(room.localParticipant.isScreenShareEnabled);
     };
     room
       .on(RoomEvent.ParticipantConnected, refresh)
@@ -68,11 +97,14 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
       .on(RoomEvent.TrackMuted, refresh)
       .on(RoomEvent.TrackUnmuted, refresh)
       .on(RoomEvent.LocalTrackPublished, refresh)
+      .on(RoomEvent.LocalTrackUnpublished, refresh)
       .on(RoomEvent.TrackSubscribed, (track: RemoteTrack) => {
         if (track.kind === Track.Kind.Audio) audioRef.current?.appendChild(track.attach());
+        refresh();
       })
       .on(RoomEvent.TrackUnsubscribed, (track: RemoteTrack) => {
         track.detach().forEach((el) => el.remove());
+        refresh();
       })
       .on(RoomEvent.Disconnected, () => {
         if (roomRef.current === room) {
@@ -92,7 +124,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
 
   async function join(channel: Channel) {
     if (channelId === channel.id && status === 'connected') return;
-    await leave(); // leave any current call first
+    await leave();
 
     setStatus('connecting');
     setError('');
@@ -106,8 +138,14 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     try {
       const { url, token } = await api.post<VoiceTokenResponse>(`/api/channels/${channel.id}/voice-token`);
       await room.connect(url, token);
-      // Browser-native noise suppression / echo cancellation (free, built in).
-      await room.localParticipant.setMicrophoneEnabled(true, { noiseSuppression: true, echoCancellation: true, autoGainControl: true });
+      await room.localParticipant.setMicrophoneEnabled(true, { deviceId: micDeviceId, noiseSuppression: true, echoCancellation: true, autoGainControl: true });
+      if (speakerDeviceId) {
+        try {
+          await room.switchActiveDevice('audiooutput', speakerDeviceId);
+        } catch {
+          /* speaker selection unsupported in this browser */
+        }
+      }
       setStatus('connected');
       setMuted(false);
       setJoinedAt(Date.now());
@@ -129,8 +167,41 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     setMuted(next);
   }
 
+  async function toggleScreen() {
+    const room = roomRef.current;
+    if (!room) return;
+    const next = !screenSharing;
+    try {
+      await room.localParticipant.setScreenShareEnabled(next, { audio: true });
+      setScreenSharing(next);
+    } catch {
+      // User cancelled the screen picker — sync to the real state.
+      setScreenSharing(room.localParticipant.isScreenShareEnabled);
+    }
+  }
+
+  async function setMicDevice(id: string) {
+    setMicDeviceId(id);
+    const room = roomRef.current;
+    if (room) await room.switchActiveDevice('audioinput', id);
+  }
+
+  async function setSpeakerDevice(id: string) {
+    setSpeakerDeviceId(id);
+    const room = roomRef.current;
+    if (room) {
+      try {
+        await room.switchActiveDevice('audiooutput', id);
+      } catch {
+        /* unsupported */
+      }
+    }
+  }
+
   return (
-    <VoiceCtx.Provider value={{ channelId, channelName, status, error, members, muted, joinedAt, join, leave, toggleMute }}>
+    <VoiceCtx.Provider
+      value={{ channelId, channelName, status, error, members, screens, muted, screenSharing, joinedAt, micDeviceId, speakerDeviceId, join, leave, toggleMute, toggleScreen, setMicDevice, setSpeakerDevice }}
+    >
       {children}
       <div ref={audioRef} style={{ display: 'none' }} />
     </VoiceCtx.Provider>

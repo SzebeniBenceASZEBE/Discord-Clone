@@ -3,6 +3,7 @@ import { useAuth } from '../auth/AuthContext.tsx';
 import { useSocket } from '../socket/SocketContext.tsx';
 import { theme } from '../theme.ts';
 import { Avatar } from './Avatar.tsx';
+import { VoiceSettingsModal } from '../voice/VoiceSettingsModal.tsx';
 
 function IconButton({ title, active, onClick, children }: { title: string; active?: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
@@ -53,6 +54,7 @@ export function UserPanel() {
   const { connected } = useSocket();
   const [muted, setMuted] = useState(false);
   const [deafened, setDeafened] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
 
   if (!user) return null;
 
@@ -65,7 +67,8 @@ export function UserPanel() {
       </div>
       <IconButton title={muted ? 'Unmute' : 'Mute'} active={muted} onClick={() => setMuted((m) => !m)}><MicIcon off={muted} /></IconButton>
       <IconButton title={deafened ? 'Undeafen' : 'Deafen'} active={deafened} onClick={() => setDeafened((d) => !d)}><HeadphonesIcon off={deafened} /></IconButton>
-      <IconButton title="Settings (coming soon)" onClick={() => {}}><GearIcon /></IconButton>
+      <IconButton title="Voice settings" onClick={() => setShowSettings(true)}><GearIcon /></IconButton>
+      {showSettings && <VoiceSettingsModal onClose={() => setShowSettings(false)} />}
     </div>
   );
 }
