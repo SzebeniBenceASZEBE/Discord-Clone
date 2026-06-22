@@ -16,6 +16,7 @@ interface MessageRow {
   id: string;
   authorId: string;
   authorName: string;
+  authorUsername: string;
   nonce: string;
   ciphertext: string;
   createdAt: number;
@@ -28,6 +29,7 @@ function rowToMessage(conversationId: string, r: MessageRow): Message {
     conversationId,
     authorId: r.authorId,
     authorName: r.authorName,
+    authorUsername: r.authorUsername,
     seq: r.seq,
     content: decryptAtRest(r.nonce, r.ciphertext),
     attachments: [],
@@ -38,7 +40,7 @@ function rowToMessage(conversationId: string, r: MessageRow): Message {
 }
 
 /** Store a message (encrypted) and return it with its server-assigned seq. */
-export function sendMessage(db: DatabaseSync, conversationId: string, authorId: string, authorName: string, content: string): Message {
+export function sendMessage(db: DatabaseSync, conversationId: string, authorId: string, authorName: string, authorUsername: string, content: string): Message {
   const id = randomUUID();
   const now = Date.now();
   const { nonce, ciphertext } = encryptAtRest(content);
@@ -50,6 +52,7 @@ export function sendMessage(db: DatabaseSync, conversationId: string, authorId: 
     conversationId,
     authorId,
     authorName,
+    authorUsername,
     seq: Number(info.lastInsertRowid),
     content,
     attachments: [],
@@ -59,7 +62,7 @@ export function sendMessage(db: DatabaseSync, conversationId: string, authorId: 
 
 /** Most recent messages in a conversation, oldest→newest. `before` pages back. */
 export function listMessages(db: DatabaseSync, conversationId: string, limit: number, before?: number): Message[] {
-  const cols = `m.seq, m.id, m.author_id AS authorId, u.display_name AS authorName, m.nonce, m.ciphertext, m.created_at AS createdAt, m.edited_at AS editedAt`;
+  const cols = `m.seq, m.id, m.author_id AS authorId, u.display_name AS authorName, u.username AS authorUsername, m.nonce, m.ciphertext, m.created_at AS createdAt, m.edited_at AS editedAt`;
   const rows = (
     before !== undefined
       ? db.prepare(`SELECT ${cols} FROM messages m JOIN users u ON u.id = m.author_id WHERE m.conversation_id = ? AND m.seq < ? ORDER BY m.seq DESC LIMIT ?`).all(conversationId, before, limit)

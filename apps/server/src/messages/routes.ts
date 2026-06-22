@@ -31,7 +31,7 @@ export function messageRoutes(opts: { db: DatabaseSync; hub: Hub }) {
       if (!content && attachmentIds.length === 0) return reply.code(400).send({ error: 'message is empty' });
       if (content.length > MAX_LENGTH) return reply.code(400).send({ error: `message too long (max ${MAX_LENGTH})` });
 
-      const message = sendMessage(db, id, req.user!.id, req.user!.displayName, content);
+      const message = sendMessage(db, id, req.user!.id, req.user!.displayName, req.user!.username, content);
       if (attachmentIds.length) message.attachments = linkAttachments(db, attachmentIds, id, message.id);
       hub.broadcast(id, { type: 'message.created', message });
       return reply.code(201).send(message);

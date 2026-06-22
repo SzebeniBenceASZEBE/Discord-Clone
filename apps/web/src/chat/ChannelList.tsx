@@ -1,5 +1,6 @@
 import type { Channel, Community } from '@dc/shared';
 import { theme, layout } from '../theme.ts';
+import { UserPanel } from '../components/UserPanel.tsx';
 
 /** The second column when a server is open: its channels, grouped by kind. */
 export function ChannelList({
@@ -57,6 +58,7 @@ export function ChannelList({
         <div style={{ padding: '12px 8px 4px', color: theme.textMuted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.4px' }}>Voice</div>
         {voice.map((c) => row(c, false))}
       </div>
+      <UserPanel />
     </aside>
   );
 }

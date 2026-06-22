@@ -4,7 +4,6 @@ import type { Channel, Community, CreatedCommunity, CreatedInvite, CreatedServer
 import { theme } from './theme.ts';
 import { api } from './api.ts';
 import { useAuth } from './auth/AuthContext.tsx';
-import { useSocket } from './socket/SocketContext.tsx';
 import { ServerRail } from './components/ServerRail.tsx';
 import { DmSidebar } from './components/DmSidebar.tsx';
 import { ActiveNow } from './components/ActiveNow.tsx';
@@ -19,7 +18,6 @@ import { CreateServerModal } from './components/CreateServerModal.tsx';
  */
 export function AppShell() {
   const { user, logout } = useAuth();
-  const { connected } = useSocket();
 
   // Servers + channels.
   const [communities, setCommunities] = useState<Community[]>([]);
@@ -154,19 +152,16 @@ export function AppShell() {
       <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         <header style={{ height: 48, flex: 'none', display: 'flex', alignItems: 'center', gap: 12, padding: '0 16px', boxShadow: '0 1px 0 rgba(0,0,0,.2)', fontWeight: 600 }}>
           {active ? active.title : 'Friends'}
-          <span title={connected ? 'Connected' : 'Offline'} style={{ marginLeft: 'auto', fontSize: 12, color: connected ? theme.green : theme.textMuted, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: connected ? theme.green : theme.textMuted }} />
-            {connected ? 'online' : 'offline'}
-          </span>
-          {user?.isAdmin && (
-            <button onClick={makeInvite} disabled={inviteBusy} style={{ background: theme.blurple, border: 'none', color: '#fff', borderRadius: 4, padding: '4px 10px', fontSize: 12, cursor: 'pointer' }}>
-              {inviteBusy ? 'Generating…' : 'Invite a friend'}
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+            {user?.isAdmin && (
+              <button onClick={makeInvite} disabled={inviteBusy} style={{ background: theme.blurple, border: 'none', color: '#fff', borderRadius: 4, padding: '7px 14px', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
+                {inviteBusy ? 'Generating…' : 'Invite a friend'}
+              </button>
+            )}
+            <button onClick={() => logout()} style={{ background: theme.sidebar, border: `1px solid ${theme.divider}`, color: theme.text, borderRadius: 4, padding: '7px 14px', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
+              Log out
             </button>
-          )}
-          <span style={{ color: theme.textMuted, fontWeight: 400, fontSize: 13 }}>{user?.displayName}</span>
-          <button onClick={() => logout()} style={{ background: 'none', border: `1px solid ${theme.divider}`, color: theme.textMuted, borderRadius: 4, padding: '4px 10px', fontSize: 12, cursor: 'pointer' }}>
-            Log out
-          </button>
+          </div>
         </header>
 
         {invite && (

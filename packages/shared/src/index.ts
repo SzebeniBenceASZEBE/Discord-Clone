@@ -57,6 +57,8 @@ export interface Message {
   authorId: Id;
   /** Author's display name at fetch time (denormalized for rendering). */
   authorName?: string;
+  /** Author's username/handle at fetch time. */
+  authorUsername?: string;
   seq: number;
   content: string;
   attachments: AttachmentRef[];

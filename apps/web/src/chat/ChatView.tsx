@@ -4,6 +4,7 @@ import type { AttachmentRef, Message } from '@dc/shared';
 import { api, uploadFile } from '../api.ts';
 import { theme } from '../theme.ts';
 import { useSocket } from '../socket/SocketContext.tsx';
+import { Avatar } from '../components/Avatar.tsx';
 
 function formatTime(ms: number): string {
   return new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -101,11 +102,17 @@ export function ChatView({ conversationId, composerPlaceholder, emptyLabel }: { 
           <div style={{ color: theme.textMuted, padding: '8px 0' }}>{emptyLabel}</div>
         ) : (
           messages.map((m) => (
-            <div key={m.id} style={{ padding: '4px 0' }}>
-              <span style={{ fontWeight: 600, color: theme.text }}>{m.authorName ?? 'unknown'}</span>
-              <span style={{ marginLeft: 8, fontSize: 11, color: theme.textMuted }}>{formatTime(m.createdAt)}</span>
-              {m.content && <div style={{ color: theme.text, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{m.content}</div>}
-              {m.attachments.map((att) => <Attachment key={att.id} att={att} />)}
+            <div key={m.id} style={{ display: 'flex', gap: 12, padding: '8px 0' }}>
+              <Avatar name={m.authorName ?? '?'} id={m.authorId} size={40} />
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+                  <span style={{ fontWeight: 600, color: theme.text }}>{m.authorName ?? 'unknown'}</span>
+                  {m.authorUsername && <span style={{ fontSize: 12, color: theme.textMuted }}>{m.authorUsername}</span>}
+                  <span style={{ fontSize: 11, color: theme.textMuted }}>{formatTime(m.createdAt)}</span>
+                </div>
+                {m.content && <div style={{ color: theme.text, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{m.content}</div>}
+                {m.attachments.map((att) => <Attachment key={att.id} att={att} />)}
+              </div>
             </div>
           ))
         )}

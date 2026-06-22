@@ -1,28 +1,12 @@
 import type { DmSummary, PresenceStatus, UserSummary } from '@dc/shared';
 import { theme, layout } from '../theme.ts';
+import { Avatar } from './Avatar.tsx';
+import { UserPanel } from './UserPanel.tsx';
 
-const statusColor: Record<PresenceStatus, string> = {
-  online: theme.green,
-  idle: '#f0b232',
-  dnd: '#f23f43',
-  offline: theme.textMuted,
-};
-
-function Avatar({ name }: { name: string }) {
-  return (
-    <div style={{ width: 32, height: 32, flex: 'none', borderRadius: '50%', background: theme.hover, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, color: theme.text }}>
-      {name.charAt(0).toUpperCase()}
-    </div>
-  );
-}
-
-function PersonRow({ name, status, selected, onClick }: { name: string; status: PresenceStatus; selected: boolean; onClick: () => void }) {
+function PersonRow({ id, name, status, selected, onClick }: { id: string; name: string; status: PresenceStatus; selected: boolean; onClick: () => void }) {
   return (
     <div onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 8px', borderRadius: 4, cursor: 'pointer', background: selected ? theme.hover : 'transparent' }}>
-      <div style={{ position: 'relative' }}>
-        <Avatar name={name} />
-        <span style={{ position: 'absolute', right: -2, bottom: -2, width: 12, height: 12, borderRadius: '50%', background: statusColor[status], border: `3px solid ${theme.sidebar}` }} />
-      </div>
+      <Avatar name={name} id={id} size={32} status={status} ringColor={theme.sidebar} />
       <span style={{ color: selected ? theme.text : theme.textMuted }}>{name}</span>
     </div>
   );
@@ -52,26 +36,21 @@ export function DmSidebar({
       </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: 8 }} className="scrollthin">
         {dms.map((dm) => (
-          <PersonRow
-            key={dm.conversationId}
-            name={dm.otherUser.displayName}
-            status={dm.otherUser.status}
-            selected={dm.conversationId === selectedConversationId}
-            onClick={() => onSelectDm(dm)}
-          />
+          <PersonRow key={dm.conversationId} id={dm.otherUser.id} name={dm.otherUser.displayName} status={dm.otherUser.status} selected={dm.conversationId === selectedConversationId} onClick={() => onSelectDm(dm)} />
         ))}
 
         {people.length > 0 && (
           <div style={{ padding: '12px 8px 4px', color: theme.textMuted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.4px' }}>People</div>
         )}
         {people.map((u) => (
-          <PersonRow key={u.id} name={u.displayName} status={u.status} selected={false} onClick={() => onStartDm(u)} />
+          <PersonRow key={u.id} id={u.id} name={u.displayName} status={u.status} selected={false} onClick={() => onStartDm(u)} />
         ))}
 
         {dms.length === 0 && people.length === 0 && (
           <div style={{ color: theme.textMuted, fontSize: 13, padding: 8 }}>No one else has an account yet. Invite a friend!</div>
         )}
       </div>
+      <UserPanel />
     </aside>
   );
 }
