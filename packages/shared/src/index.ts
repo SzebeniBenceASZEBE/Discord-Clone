@@ -86,3 +86,19 @@ export type ServerEvent =
 export type ClientEvent =
   | { type: 'subscribe'; conversationId: Id }
   | { type: 'unsubscribe'; conversationId: Id };
+
+// --- Auth ---
+
+/** The current user as returned by the auth endpoints. Contains no secrets. */
+export interface AuthedUser {
+  id: Id;
+  username: string;
+  displayName: string;
+  isAdmin: boolean;
+}
+
+/** Body of POST /api/auth/login. */
+export interface LoginRequest {
+  username: string;
+  password: string;
+}
