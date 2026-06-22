@@ -1,8 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import type { DatabaseSync } from 'node:sqlite';
-import type { CreateChannelRequest, CreateCommunityRequest } from '@dc/shared';
+import type { CreateCommunityRequest } from '@dc/shared';
 import { makeRequireAuth } from '../auth/guard.ts';
-import { createChannel, createCommunity, isMember, isOwner, listChannels, listCommunitiesForUser } from './store.ts';
+import { createCommunity, isMember, listChannels, listCommunitiesForUser } from './store.ts';
 
 interface CommunityOptions {
   db: DatabaseSync;
@@ -13,7 +13,9 @@ export function communityRoutes(opts: CommunityOptions) {
   const requireAuth = makeRequireAuth(db);
 
   return async function (app: FastifyInstance): Promise<void> {
-    // POST /api/communities — create a server (caller becomes owner).
+    // POST /api/communities — create a server (caller becomes owner + member).
+    // Anyone logged in can do this — no admin needed. Two channels (one text,
+    // one voice) are created automatically; we don't manage channels beyond that.
     app.post('/api/communities', { preHandler: requireAuth }, async (req, reply) => {
       const body = (req.body ?? {}) as Partial<CreateCommunityRequest>;
       const name = (body.name ?? '').trim();
@@ -35,22 +37,6 @@ export function communityRoutes(opts: CommunityOptions) {
         return reply.code(403).send({ error: 'not a member of this server' });
       }
       return listChannels(db, id);
-    });
-
-    // POST /api/communities/:id/channels — owner only (for now).
-    app.post('/api/communities/:id/channels', { preHandler: requireAuth }, async (req, reply) => {
-      const { id } = req.params as { id: string };
-      if (!isOwner(db, id, req.user!.id)) {
-        return reply.code(403).send({ error: 'only the owner can add channels' });
-      }
-      const body = (req.body ?? {}) as Partial<CreateChannelRequest>;
-      // Discord-style: lowercase, spaces become hyphens.
-      const name = (body.name ?? '').trim().toLowerCase().replace(/\s+/g, '-');
-      const kind = body.kind === 'voice' ? 'voice' : 'text';
-      if (!/^[a-z0-9-]{1,30}$/.test(name)) {
-        return reply.code(400).send({ error: 'channel name: a–z, 0–9, hyphen (1–30 chars)' });
-      }
-      return reply.code(201).send(createChannel(db, id, name, kind));
     });
   };
 }

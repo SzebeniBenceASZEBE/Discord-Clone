@@ -41,6 +41,8 @@ export function createCommunity(db: DatabaseSync, ownerId: string, name: string)
       .run(id, ownerId, now);
     db.prepare(`INSERT INTO channels (id, community_id, kind, name, position, created_at) VALUES (?, ?, 'text', 'general', 0, ?)`)
       .run(randomUUID(), id, now);
+    db.prepare(`INSERT INTO channels (id, community_id, kind, name, position, created_at) VALUES (?, ?, 'voice', 'voice', 1, ?)`)
+      .run(randomUUID(), id, now);
     db.exec('COMMIT');
   } catch (err) {
     db.exec('ROLLBACK');
@@ -67,6 +69,13 @@ export function isMember(db: DatabaseSync, communityId: string, userId: string):
 
 export function isOwner(db: DatabaseSync, communityId: string, userId: string): boolean {
   return !!db.prepare(`SELECT 1 FROM communities WHERE id = ? AND owner_id = ?`).get(communityId, userId);
+}
+
+/** Look up a single channel (used by the messaging layer to find its community). */
+export function getChannel(db: DatabaseSync, channelId: string): Channel | undefined {
+  return db
+    .prepare(`SELECT id, community_id AS communityId, kind, name, position FROM channels WHERE id = ?`)
+    .get(channelId) as Channel | undefined;
 }
 
 export function listChannels(db: DatabaseSync, communityId: string): Channel[] {

@@ -1,3 +1,4 @@
+import process from 'node:process';
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
@@ -6,8 +7,17 @@ import type { ServerEvent } from '@dc/shared';
 import { openDatabase } from './db.ts';
 import { authRoutes } from './auth/routes.ts';
 import { communityRoutes } from './communities/routes.ts';
+import { messageRoutes } from './messages/routes.ts';
 import { csrfGuard } from './auth/guard.ts';
 import { COOKIE_NAME, getSessionUser } from './auth/sessions.ts';
+
+// Load apps/server/.env (port, MASTER_KEY, …) when present. In production the
+// real environment provides these, so a missing file is fine.
+try {
+  process.loadEnvFile();
+} catch {
+  /* no .env file — rely on the ambient environment */
+}
 
 const PORT = Number(process.env.PORT ?? 3001);
 const DATA_DIR = process.env.DATA_DIR ?? './data';
@@ -34,6 +44,13 @@ await app.register(authRoutes({ db, cookieSecure, appUrl: APP_URL }));
 
 // Communities + channels: /api/communities…
 await app.register(communityRoutes({ db }));
+
+// Messages: /api/channels/:id/messages
+await app.register(messageRoutes({ db }));
+
+if (!process.env.MASTER_KEY) {
+  app.log.warn('MASTER_KEY is not set — sending/reading messages will fail until it is configured in .env');
+}
 
 // Realtime channel — now authenticated via the same session cookie.
 app.register(async (instance) => {

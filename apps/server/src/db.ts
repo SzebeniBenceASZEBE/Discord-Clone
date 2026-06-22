@@ -93,5 +93,21 @@ function bootstrap(db: DatabaseSync): void {
 
     CREATE INDEX IF NOT EXISTS idx_channels_community ON channels(community_id);
     CREATE INDEX IF NOT EXISTS idx_members_user ON community_members(user_id);
+
+    -- Chat messages. 'seq' is an auto-incrementing integer giving a reliable
+    -- global order; clients sort by it within a channel. Content is stored
+    -- encrypted at rest (nonce + ciphertext) — never as plaintext.
+    CREATE TABLE IF NOT EXISTS messages (
+      seq         INTEGER PRIMARY KEY AUTOINCREMENT,
+      id          TEXT NOT NULL UNIQUE,
+      channel_id  TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+      author_id   TEXT NOT NULL REFERENCES users(id),
+      nonce       TEXT NOT NULL,
+      ciphertext  TEXT NOT NULL,
+      created_at  INTEGER NOT NULL,
+      edited_at   INTEGER
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_messages_channel ON messages(channel_id, seq);
   `);
 }

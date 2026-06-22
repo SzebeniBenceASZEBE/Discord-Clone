@@ -150,3 +150,8 @@ export interface CreateChannelRequest {
   name: string;
   kind: ChannelKind;
 }
+
+/** Body of POST /api/channels/:channelId/messages. */
+export interface SendMessageRequest {
+  content: string;
+}
