@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './auth/AuthContext.tsx';
 import { SocketProvider } from './socket/SocketContext.tsx';
 import { Login } from './pages/Login.tsx';
 import { Register } from './pages/Register.tsx';
+import { JoinServer } from './pages/JoinServer.tsx';
 import { AppShell } from './AppShell.tsx';
 
 /** The bouncer: wait for the "who am I?" answer, then allow in or redirect. */
@@ -31,6 +32,7 @@ export function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/invite/:token" element={<Register />} />
+          <Route path="/join/:token" element={<JoinServer />} />
           <Route path="/*" element={<Protected />} />
         </Routes>
       </BrowserRouter>

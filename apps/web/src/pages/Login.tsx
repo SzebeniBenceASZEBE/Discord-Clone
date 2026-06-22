@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext.tsx';
 import { ApiError } from '../api.ts';
 import { AuthShell } from '../components/AuthShell.tsx';
@@ -9,6 +9,8 @@ import { buttonStyle, errorStyle, labelStyle } from './authStyles.ts';
 export function Login() {
   const { user, login } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const next = searchParams.get('next') || '/';
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [show, setShow] = useState(false);
@@ -16,7 +18,7 @@ export function Login() {
   const [busy, setBusy] = useState(false);
 
   // Already logged in? Skip the screen.
-  if (user) return <Navigate to="/" replace />;
+  if (user) return <Navigate to={next} replace />;
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -24,7 +26,7 @@ export function Login() {
     setError('');
     try {
       await login(username.trim(), password);
-      navigate('/', { replace: true });
+      navigate(next, { replace: true });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not log in');
     } finally {

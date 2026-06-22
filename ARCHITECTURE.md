@@ -2,7 +2,7 @@
 
 A file-by-file map of the project. Kept current at the end of each build phase.
 
-**Status:** auth + messaging complete — login/sessions/invites, servers with one text + one voice channel, encrypted message history, live fan-out, and the chat UI. Next: joining someone else's server (per-server invites), then file sharing, then voice/screen via LiveKit.
+**Status:** auth, messaging (servers + channels), 1:1 DMs, per-server invite links, and a default "everyone" server are all working. Messages, channels, and DMs share one "conversation" engine. Next: file/image sharing, then voice/screen via LiveKit.
 
 ## Shape
 
@@ -46,10 +46,13 @@ Auth request flow: `index.ts → auth/guard → auth/routes → (passwords / ses
 - `src/auth/routes.ts` — **[auth]** endpoints: `/api/auth/login`, `/register`, `/logout`, `/me`, and `/api/invites` (mint/list/revoke/validate).
 - `src/auth/types.ts` — **[auth]** tells TypeScript a request may carry `req.user`.
 - `src/scripts/create-user.ts` — **[auth]** one-time CLI to bootstrap the first admin (`npm run create-user`).
-- `src/communities/store.ts` — data layer for servers + channels: create a server (owner + member + one text + one voice channel), list, membership checks (`isMember`/`isOwner`), `getChannel`.
-- `src/communities/routes.ts` — `/api/communities` create/list and `/api/communities/:id/channels` (members only).
-- `src/messages/store.ts` — send (encrypt + store + assign seq) and list history (decrypt, join author name).
-- `src/messages/routes.ts` — `/api/channels/:id/messages` send/list (member + text-channel checks); broadcasts new messages via the hub.
+- `src/communities/store.ts` — servers + channels data: create server (owner + member + one text + one voice channel), list, membership checks, `getChannel`/`getCommunity`, and `ensureDefaults` (seed/maintain the default "everyone" server).
+- `src/communities/invites.ts` — per-server invite links: mint, validate, accept (join).
+- `src/communities/routes.ts` — `/api/communities` create/list/channels plus `/api/communities/:id/invites` and `/api/server-invites/:token` (preview + accept).
+- `src/messages/store.ts` — send (encrypt + store + seq) and list history (decrypt, join author name), keyed by conversation.
+- `src/messages/access.ts` — resolves who may read/write a conversation (channel = membership, DM = participant).
+- `src/messages/routes.ts` — `/api/conversations/:id/messages` send/list for channels AND DMs; broadcasts via the hub.
+- `src/dm/store.ts` + `src/dm/routes.ts` — 1:1 DMs: `/api/users`, `/api/dms` (open/list); a DM is just a conversation.
 - `src/crypto.ts` — AES-256-GCM at-rest encryption keyed by `MASTER_KEY`.
 - `src/realtime/hub.ts` — in-memory registry of WebSocket connections + their channel subscriptions; `broadcast` pushes a message to watchers.
 - `.env.example` — template for secrets/config (port, data dir, at-rest `MASTER_KEY`). Copied to gitignored `.env`.
@@ -66,6 +69,7 @@ Browser flow: `main.tsx → App.tsx (bouncer) → Login/Register or AppShell`, w
 - `src/api.ts` — fetch wrapper: attaches CSRF header, carries the cookie, throws `ApiError` on failure.
 - `src/pages/Login.tsx` — **[auth]** the login screen.
 - `src/pages/Register.tsx` — **[auth]** invite registration; validates the token first (checking → valid form / dead-link).
+- `src/pages/JoinServer.tsx` — the `/join/<token>` landing: preview a server invite and join (redirects to login first if needed).
 - `src/pages/authStyles.ts` — shared inline styles for the auth screens.
 - `src/components/AuthShell.tsx` — centered dark card the auth screens sit in.
 - `src/AppShell.tsx` — the logged-in app: owns navigation state (selected server/channel), fetches servers + channels, holds the admin invite button, and renders the rail / channel list / chat.

@@ -7,11 +7,13 @@ export function ChannelList({
   channels,
   selectedChannelId,
   onSelectChannel,
+  onInvite,
 }: {
   community: Community;
   channels: Channel[];
   selectedChannelId: string | null;
   onSelectChannel: (id: string) => void;
+  onInvite: () => void;
 }) {
   const text = channels.filter((c) => c.kind === 'text');
   const voice = channels.filter((c) => c.kind === 'voice');
@@ -43,8 +45,11 @@ export function ChannelList({
 
   return (
     <aside style={{ width: layout.sidebarWidth, flex: 'none', background: theme.sidebar, display: 'flex', flexDirection: 'column' }}>
-      <div style={{ height: layout.topBarHeight, flex: 'none', display: 'flex', alignItems: 'center', padding: '0 12px', fontWeight: 600, boxShadow: '0 1px 0 rgba(0,0,0,.2)' }}>
-        {community.name}
+      <div style={{ height: layout.topBarHeight, flex: 'none', display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', fontWeight: 600, boxShadow: '0 1px 0 rgba(0,0,0,.2)' }}>
+        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{community.name}</span>
+        <button onClick={onInvite} title="Invite people to this server" style={{ background: 'none', border: `1px solid ${theme.divider}`, color: theme.textMuted, borderRadius: 4, padding: '2px 8px', fontSize: 11, cursor: 'pointer' }}>
+          Invite
+        </button>
       </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: 8 }} className="scrollthin">
         <div style={{ padding: '4px 8px', color: theme.textMuted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.4px' }}>Text</div>

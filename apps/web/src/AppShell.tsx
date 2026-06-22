@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import type { Channel, Community, CreatedCommunity, CreatedInvite, DmSummary, UserSummary } from '@dc/shared';
+import { useSearchParams } from 'react-router-dom';
+import type { Channel, Community, CreatedCommunity, CreatedInvite, CreatedServerInvite, DmSummary, UserSummary } from '@dc/shared';
 import { theme } from './theme.ts';
 import { api } from './api.ts';
 import { useAuth } from './auth/AuthContext.tsx';
@@ -32,15 +33,24 @@ export function AppShell() {
   const [users, setUsers] = useState<UserSummary[]>([]);
   const [selectedDm, setSelectedDm] = useState<DmSummary | null>(null);
 
-  // Invites.
-  const [inviteUrl, setInviteUrl] = useState<string | null>(null);
+  // Invites (account invite or server invite — same banner).
+  const [invite, setInvite] = useState<{ url: string; label: string } | null>(null);
   const [inviteBusy, setInviteBusy] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  const [searchParams, setSearchParams] = useSearchParams();
 
   useEffect(() => {
     api.get<Community[]>('/api/communities').then(setCommunities);
     api.get<DmSummary[]>('/api/dms').then(setDms);
     api.get<UserSummary[]>('/api/users').then(setUsers);
+    // After joining a server via a /join link, land on it.
+    const justJoined = searchParams.get('server');
+    if (justJoined) {
+      setSelectedCommunityId(justJoined);
+      setSearchParams({}, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -86,16 +96,27 @@ export function AppShell() {
     setInviteBusy(true);
     setCopied(false);
     try {
-      const invite = await api.post<CreatedInvite>('/api/invites');
-      setInviteUrl(invite.url);
+      const created = await api.post<CreatedInvite>('/api/invites');
+      setInvite({ url: created.url, label: 'Account invite — single-use, expires in 7 days' });
+    } finally {
+      setInviteBusy(false);
+    }
+  }
+
+  async function makeServerInvite(communityId: string, name: string) {
+    setInviteBusy(true);
+    setCopied(false);
+    try {
+      const created = await api.post<CreatedServerInvite>(`/api/communities/${communityId}/invites`);
+      setInvite({ url: created.url, label: `Invite to ${name} — anyone logged in can join, expires in 7 days` });
     } finally {
       setInviteBusy(false);
     }
   }
 
   async function copyInvite() {
-    if (!inviteUrl) return;
-    await navigator.clipboard.writeText(inviteUrl);
+    if (!invite) return;
+    await navigator.clipboard.writeText(invite.url);
     setCopied(true);
   }
 
@@ -119,7 +140,13 @@ export function AppShell() {
       />
 
       {selectedCommunity ? (
-        <ChannelList community={selectedCommunity} channels={channels} selectedChannelId={selectedChannelId} onSelectChannel={setSelectedChannelId} />
+        <ChannelList
+          community={selectedCommunity}
+          channels={channels}
+          selectedChannelId={selectedChannelId}
+          onSelectChannel={setSelectedChannelId}
+          onInvite={() => makeServerInvite(selectedCommunity.id, selectedCommunity.name)}
+        />
       ) : (
         <DmSidebar dms={dms} users={users} selectedConversationId={selectedDm?.conversationId ?? null} onSelectDm={selectDm} onStartDm={startDm} />
       )}
@@ -142,12 +169,12 @@ export function AppShell() {
           </button>
         </header>
 
-        {inviteUrl && (
+        {invite && (
           <div style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', background: theme.sidebar, borderBottom: '1px solid rgba(0,0,0,.2)' }}>
-            <span style={{ fontSize: 12, color: theme.textMuted }}>Single-use invite link (expires in 7 days):</span>
-            <code style={{ flex: 1, fontSize: 12, color: theme.text, background: theme.rail, padding: '6px 10px', borderRadius: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inviteUrl}</code>
+            <span style={{ fontSize: 12, color: theme.textMuted }}>{invite.label}:</span>
+            <code style={{ flex: 1, fontSize: 12, color: theme.text, background: theme.rail, padding: '6px 10px', borderRadius: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{invite.url}</code>
             <button onClick={copyInvite} style={{ background: 'none', border: `1px solid ${theme.divider}`, color: theme.text, borderRadius: 4, padding: '4px 10px', fontSize: 12, cursor: 'pointer' }}>{copied ? 'Copied!' : 'Copy'}</button>
-            <button onClick={() => setInviteUrl(null)} aria-label="Dismiss" style={{ background: 'none', border: 'none', color: theme.textMuted, fontSize: 16, cursor: 'pointer' }}>×</button>
+            <button onClick={() => setInvite(null)} aria-label="Dismiss" style={{ background: 'none', border: 'none', color: theme.textMuted, fontSize: 16, cursor: 'pointer' }}>×</button>
           </div>
         )}
 
