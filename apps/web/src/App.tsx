@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { theme } from './theme.ts';
 import { AuthProvider, useAuth } from './auth/AuthContext.tsx';
+import { SocketProvider } from './socket/SocketContext.tsx';
 import { Login } from './pages/Login.tsx';
 import { Register } from './pages/Register.tsx';
 import { AppShell } from './AppShell.tsx';
@@ -16,7 +17,11 @@ function Protected() {
     );
   }
   if (!user) return <Navigate to="/login" replace />;
-  return <AppShell />;
+  return (
+    <SocketProvider>
+      <AppShell />
+    </SocketProvider>
+  );
 }
 
 export function App() {

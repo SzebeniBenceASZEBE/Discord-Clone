@@ -26,7 +26,7 @@ export function messageRoutes(opts: { db: DatabaseSync; hub: Hub }) {
       if (!content) return reply.code(400).send({ error: 'message is empty' });
       if (content.length > MAX_LENGTH) return reply.code(400).send({ error: `message too long (max ${MAX_LENGTH})` });
 
-      const message = sendMessage(db, channelId, req.user!.id, content);
+      const message = sendMessage(db, channelId, req.user!.id, req.user!.displayName, content);
       // Push it live to everyone watching this channel.
       hub.broadcast(channelId, { type: 'message.created', message });
       return reply.code(201).send(message);

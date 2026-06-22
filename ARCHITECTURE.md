@@ -2,7 +2,7 @@
 
 A file-by-file map of the project. Kept current at the end of each build phase.
 
-**Status:** auth phase complete (login, sessions, invites, gated UI). Next: communities + text channels + live message history.
+**Status:** auth + messaging complete — login/sessions/invites, servers with one text + one voice channel, encrypted message history, live fan-out, and the chat UI. Next: joining someone else's server (per-server invites), then file sharing, then voice/screen via LiveKit.
 
 ## Shape
 
@@ -46,6 +46,12 @@ Auth request flow: `index.ts → auth/guard → auth/routes → (passwords / ses
 - `src/auth/routes.ts` — **[auth]** endpoints: `/api/auth/login`, `/register`, `/logout`, `/me`, and `/api/invites` (mint/list/revoke/validate).
 - `src/auth/types.ts` — **[auth]** tells TypeScript a request may carry `req.user`.
 - `src/scripts/create-user.ts` — **[auth]** one-time CLI to bootstrap the first admin (`npm run create-user`).
+- `src/communities/store.ts` — data layer for servers + channels: create a server (owner + member + one text + one voice channel), list, membership checks (`isMember`/`isOwner`), `getChannel`.
+- `src/communities/routes.ts` — `/api/communities` create/list and `/api/communities/:id/channels` (members only).
+- `src/messages/store.ts` — send (encrypt + store + assign seq) and list history (decrypt, join author name).
+- `src/messages/routes.ts` — `/api/channels/:id/messages` send/list (member + text-channel checks); broadcasts new messages via the hub.
+- `src/crypto.ts` — AES-256-GCM at-rest encryption keyed by `MASTER_KEY`.
+- `src/realtime/hub.ts` — in-memory registry of WebSocket connections + their channel subscriptions; `broadcast` pushes a message to watchers.
 - `.env.example` — template for secrets/config (port, data dir, at-rest `MASTER_KEY`). Copied to gitignored `.env`.
 - `package.json` / `tsconfig.json` — server deps (Fastify, cookie, rate-limit) + scripts.
 
@@ -62,10 +68,14 @@ Browser flow: `main.tsx → App.tsx (bouncer) → Login/Register or AppShell`, w
 - `src/pages/Register.tsx` — **[auth]** invite registration; validates the token first (checking → valid form / dead-link).
 - `src/pages/authStyles.ts` — shared inline styles for the auth screens.
 - `src/components/AuthShell.tsx` — centered dark card the auth screens sit in.
-- `src/AppShell.tsx` — the logged-in home layout (three panes); shows the user + Log out, opens the WebSocket.
-- `src/components/ServerRail.tsx` — 72px rail of server icons (placeholder).
-- `src/components/DmSidebar.tsx` — 240px DM/friends sidebar (placeholder).
-- `src/components/ActiveNow.tsx` — right "Active Now" panel (placeholder).
+- `src/AppShell.tsx` — the logged-in app: owns navigation state (selected server/channel), fetches servers + channels, holds the admin invite button, and renders the rail / channel list / chat.
+- `src/socket/SocketContext.tsx` — owns the single session WebSocket; `subscribe`/`unsubscribe` to channels, `onMessageCreated` handler registration, auto-reconnect + re-subscribe.
+- `src/chat/ChatView.tsx` — a channel's message list (history + live appends) and the composer.
+- `src/chat/ChannelList.tsx` — the second column when a server is open: its text + voice channels.
+- `src/components/CreateServerModal.tsx` — the "+" dialog to create a server.
+- `src/components/ServerRail.tsx` — 72px rail: home, one pill per server you're in, and create.
+- `src/components/DmSidebar.tsx` — 240px DM/friends sidebar shown on the home view (placeholder).
+- `src/components/ActiveNow.tsx` — right "Active Now" panel on the home view (placeholder).
 - `src/theme.ts` — color + layout tokens from the mockup.
 - `src/index.css` — global base styles (scrollbars, `.auth-input`).
 - `vite.config.ts` — dev server; proxies `/api` + `/ws` to the backend (mirrors Caddy in prod).

@@ -55,6 +55,8 @@ export interface Message {
   /** Channel id or DM conversation id. */
   conversationId: Id;
   authorId: Id;
+  /** Author's display name at fetch time (denormalized for rendering). */
+  authorName?: string;
   seq: number;
   content: string;
   attachments: AttachmentRef[];
