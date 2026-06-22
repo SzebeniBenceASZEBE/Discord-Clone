@@ -14,3 +14,15 @@ body {
 ::-webkit-scrollbar-thumb:hover { background: #0f1011; }
 ::-webkit-scrollbar-track { background: transparent; }
 .scrollthin { scrollbar-width: thin; scrollbar-color: #1a1b1e transparent; }
+
+.auth-input {
+  width: 100%;
+  background: #1e1f22;
+  border: 1px solid #1e1f22;
+  border-radius: 4px;
+  padding: 10px 12px;
+  color: #dbdee1;
+  font-size: 14px;
+  outline: none;
+}
+.auth-input:focus { border-color: #5865f2; }
