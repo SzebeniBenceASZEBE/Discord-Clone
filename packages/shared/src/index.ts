@@ -172,6 +172,21 @@ export interface CreateChannelRequest {
   kind: ChannelKind;
 }
 
+/** Returned when a member mints a per-server invite link. */
+export interface CreatedServerInvite {
+  token: string;
+  url: string;
+  expiresAt: UnixMillis | null;
+}
+
+/** Result of GET /api/server-invites/:token — can this link be used to join? */
+export interface ServerInviteInfo {
+  valid: boolean;
+  reason?: 'unknown' | 'expired';
+  communityName?: string;
+  alreadyMember?: boolean;
+}
+
 /** Body of POST /api/channels/:channelId/messages. */
 export interface SendMessageRequest {
   content: string;

@@ -27,7 +27,7 @@ function pickColor(seed: string): string {
  * Create a community, make the creator its owner+member, and give it a default
  * "general" text channel — all in one transaction.
  */
-export function createCommunity(db: DatabaseSync, ownerId: string, name: string): { community: Community; channels: Channel[] } {
+export function createCommunity(db: DatabaseSync, ownerId: string, name: string, opts: { isDefault?: boolean } = {}): { community: Community; channels: Channel[] } {
   const id = randomUUID();
   const now = Date.now();
   const label = deriveLabel(name);
@@ -35,8 +35,8 @@ export function createCommunity(db: DatabaseSync, ownerId: string, name: string)
 
   db.exec('BEGIN');
   try {
-    db.prepare(`INSERT INTO communities (id, name, label, color, owner_id, created_at) VALUES (?, ?, ?, ?, ?, ?)`)
-      .run(id, name, label, color, ownerId, now);
+    db.prepare(`INSERT INTO communities (id, name, label, color, owner_id, is_default, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+      .run(id, name, label, color, ownerId, opts.isDefault ? 1 : 0, now);
     db.prepare(`INSERT INTO community_members (community_id, user_id, role, joined_at) VALUES (?, ?, 'owner', ?)`)
       .run(id, ownerId, now);
     db.prepare(`INSERT INTO channels (id, community_id, kind, name, position, created_at) VALUES (?, ?, 'text', 'general', 0, ?)`)
@@ -61,6 +61,33 @@ export function listCommunitiesForUser(db: DatabaseSync, userId: string): Commun
        WHERE m.user_id = ? ORDER BY c.created_at`,
     )
     .all(userId) as unknown as Community[];
+}
+
+export function getCommunity(db: DatabaseSync, communityId: string): Community | undefined {
+  return db
+    .prepare(`SELECT id, name, label, color, owner_id AS ownerId FROM communities WHERE id = ?`)
+    .get(communityId) as Community | undefined;
+}
+
+/**
+ * Ensures a default server exists and that every user is a member of it. Runs
+ * on boot — idempotent. Default servers are the "everyone" rooms that need no
+ * invite. If there are no users yet, does nothing (it'll seed on a later boot).
+ */
+export function ensureDefaults(db: DatabaseSync): void {
+  const userCount = (db.prepare(`SELECT count(*) AS c FROM users`).get() as { c: number }).c;
+  if (userCount === 0) return;
+
+  const existing = db.prepare(`SELECT id FROM communities WHERE is_default = 1 LIMIT 1`).get();
+  if (!existing) {
+    const owner = db.prepare(`SELECT id FROM users ORDER BY created_at LIMIT 1`).get() as { id: string };
+    createCommunity(db, owner.id, 'Main Hall', { isDefault: true });
+  }
+
+  db.prepare(
+    `INSERT OR IGNORE INTO community_members (community_id, user_id, role, joined_at)
+     SELECT c.id, u.id, 'member', ? FROM communities c CROSS JOIN users u WHERE c.is_default = 1`,
+  ).run(Date.now());
 }
 
 export function isMember(db: DatabaseSync, communityId: string, userId: string): boolean {

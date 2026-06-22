@@ -14,7 +14,20 @@ export function openDatabase(dataDir: string): DatabaseSync {
   db.exec('PRAGMA journal_mode = WAL;');
   db.exec('PRAGMA foreign_keys = ON;');
   bootstrap(db);
+  migrate(db);
   return db;
+}
+
+/**
+ * Non-destructive schema upgrades for databases created by older versions.
+ * CREATE TABLE IF NOT EXISTS can't add a column to an existing table, so column
+ * additions go here, guarded so they run at most once.
+ */
+function migrate(db: DatabaseSync): void {
+  const communityCols = db.prepare(`PRAGMA table_info(communities)`).all() as { name: string }[];
+  if (!communityCols.some((c) => c.name === 'is_default')) {
+    db.exec(`ALTER TABLE communities ADD COLUMN is_default INTEGER NOT NULL DEFAULT 0`);
+  }
 }
 
 function bootstrap(db: DatabaseSync): void {
@@ -69,6 +82,7 @@ function bootstrap(db: DatabaseSync): void {
       label       TEXT NOT NULL,   -- short initials shown on the rail
       color       TEXT NOT NULL,   -- rail icon color
       owner_id    TEXT NOT NULL REFERENCES users(id),
+      is_default  INTEGER NOT NULL DEFAULT 0,  -- everyone is auto-joined to defaults
       created_at  INTEGER NOT NULL
     );
 
@@ -93,6 +107,17 @@ function bootstrap(db: DatabaseSync): void {
 
     CREATE INDEX IF NOT EXISTS idx_channels_community ON channels(community_id);
     CREATE INDEX IF NOT EXISTS idx_members_user ON community_members(user_id);
+
+    -- Per-server invite links (reusable until they expire). Only the hash is
+    -- stored; the raw token lives only in the link.
+    CREATE TABLE IF NOT EXISTS server_invites (
+      id            TEXT PRIMARY KEY,
+      community_id  TEXT NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
+      token_hash    TEXT NOT NULL UNIQUE,
+      created_by    TEXT NOT NULL REFERENCES users(id),
+      created_at    INTEGER NOT NULL,
+      expires_at    INTEGER
+    );
 
     -- A "conversation" is either a channel or a 1:1 DM. DMs between a pair of
     -- users; user_lo/user_hi are the two ids sorted, so each pair has one row.

@@ -89,6 +89,10 @@ export function registerWithInvite(
     db.prepare(`UPDATE invites SET consumed_by = ?, consumed_at = ? WHERE id = ?`)
       .run(userId, now, invite.id);
 
+    // Auto-join the new user to every default ("everyone") server.
+    db.prepare(`INSERT OR IGNORE INTO community_members (community_id, user_id, role, joined_at)
+                SELECT id, ?, 'member', ? FROM communities WHERE is_default = 1`).run(userId, now);
+
     db.exec('COMMIT');
     return { ok: true, userId };
   } catch (err) {

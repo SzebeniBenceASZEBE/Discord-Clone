@@ -7,6 +7,7 @@ import type { ClientEvent, ServerEvent } from '@dc/shared';
 import { openDatabase } from './db.ts';
 import { authRoutes } from './auth/routes.ts';
 import { communityRoutes } from './communities/routes.ts';
+import { ensureDefaults } from './communities/store.ts';
 import { messageRoutes } from './messages/routes.ts';
 import { resolveAccess } from './messages/access.ts';
 import { dmRoutes } from './dm/routes.ts';
@@ -28,6 +29,7 @@ const APP_URL = process.env.APP_URL ?? 'http://localhost:5173';
 const cookieSecure = process.env.NODE_ENV === 'production';
 
 const db = openDatabase(DATA_DIR);
+ensureDefaults(db); // seed/keep the default "everyone" server membership
 const hub = new Hub();
 
 const app = Fastify({ logger: true });
@@ -46,8 +48,8 @@ app.get('/api/health', async () => ({ ok: true, time: Date.now() }));
 // Auth: /api/auth/login, /logout, /me.
 await app.register(authRoutes({ db, cookieSecure, appUrl: APP_URL }));
 
-// Communities + channels: /api/communities…
-await app.register(communityRoutes({ db }));
+// Communities + channels + server invites: /api/communities…
+await app.register(communityRoutes({ db, appUrl: APP_URL }));
 
 // Messages (channels + DMs): /api/conversations/:id/messages
 await app.register(messageRoutes({ db, hub }));
