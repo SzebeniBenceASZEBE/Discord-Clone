@@ -1,0 +1,20 @@
+# LiveKit SFU config for the VPS. The home server's auth/key service mints the
+# access tokens clients use to join rooms; LiveKit only needs the matching
+# api key/secret to validate them.
+#
+# Generate a key/secret pair and set them here (and give the same secret to the
+# home auth service). Never commit real secrets.
+
+port: 7880
+rtc:
+  # UDP port range for media. Open these on the VPS firewall.
+  port_range_start: 50000
+  port_range_end: 50100
+  use_external_ip: true
+
+keys:
+  # APIkey: secret  -- replace both.
+  APIaaaaaaaaaaaa: replace_with_a_long_random_secret
+
+logging:
+  level: info
