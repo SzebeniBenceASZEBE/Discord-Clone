@@ -4,6 +4,7 @@ import type { VoiceTokenResponse } from '@dc/shared';
 import { AccessToken } from 'livekit-server-sdk';
 import { makeRequireAuth } from '../auth/guard.ts';
 import { getChannel, isMember } from '../communities/store.ts';
+import { deriveRoomKey } from '../crypto.ts';
 
 interface VoiceOptions {
   db: DatabaseSync;
@@ -39,7 +40,7 @@ export function voiceRoutes(opts: VoiceOptions) {
       at.addGrant({ roomJoin: true, room: channelId, canPublish: true, canSubscribe: true });
 
       const token = await at.toJwt();
-      const out: VoiceTokenResponse = { url: livekitUrl, token };
+      const out: VoiceTokenResponse = { url: livekitUrl, token, e2eeKey: deriveRoomKey(channelId) };
       return reply.send(out);
     });
   };

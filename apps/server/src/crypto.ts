@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
+import { createCipheriv, createDecipheriv, createHmac, randomBytes } from 'node:crypto';
 import type { CipherGCM, DecipherGCM } from 'node:crypto';
 
 /**
@@ -43,6 +43,16 @@ export function createFileDecryptor(nonce: Buffer, tag: Buffer): DecipherGCM {
   const decipher = createDecipheriv('aes-256-gcm', getKey(), nonce) as DecipherGCM;
   decipher.setAuthTag(tag);
   return decipher;
+}
+
+/**
+ * Derives the shared end-to-end encryption key for a voice room (one per
+ * channel), deterministically from the MASTER_KEY. Every authorized member
+ * derives the same key, so they can decrypt each other — but the key is never
+ * sent to the LiveKit/VPS, which only relays the already-encrypted media.
+ */
+export function deriveRoomKey(roomId: string): string {
+  return createHmac('sha256', getKey()).update(`voice-e2ee:${roomId}`).digest('base64');
 }
 
 /** Reverse of encryptAtRest. Throws if the data was tampered with. */

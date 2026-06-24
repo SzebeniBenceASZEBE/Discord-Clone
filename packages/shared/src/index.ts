@@ -202,4 +202,6 @@ export interface VoiceTokenResponse {
   url: string;
   /** Short-lived signed token authorizing this user to join the room. */
   token: string;
+  /** Shared per-room E2EE key — never seen by the SFU, only by members. */
+  e2eeKey: string;
 }

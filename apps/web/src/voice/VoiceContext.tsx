@@ -1,9 +1,16 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Room, RoomEvent, Track } from 'livekit-client';
-import type { RemoteTrack, TrackPublication } from 'livekit-client';
+import { ExternalE2EEKeyProvider, Room, RoomEvent, Track } from 'livekit-client';
+import type { RemoteTrack, RoomOptions, TrackPublication } from 'livekit-client';
 import type { Channel, VoiceTokenResponse } from '@dc/shared';
 import { api } from '../api.ts';
+
+/** Does this browser support insertable-streams E2EE? (Chromium/Firefox yes, Safari no.) */
+function e2eeSupported(): boolean {
+  if (typeof window === 'undefined') return false;
+  const w = window as unknown as { RTCRtpScriptTransform?: unknown };
+  return typeof w.RTCRtpScriptTransform !== 'undefined' || (typeof RTCRtpSender !== 'undefined' && 'createEncodedStreams' in RTCRtpSender.prototype);
+}
 
 /**
  * Holds the ONE active voice connection for the session, above channel
@@ -124,6 +131,11 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
 
   async function join(channel: Channel) {
     if (channelId === channel.id && status === 'connected') return;
+    if (!e2eeSupported()) {
+      setStatus('error');
+      setError('Encrypted calls need a Chromium browser (Chrome/Edge) or Firefox.');
+      return;
+    }
     await leave();
 
     setStatus('connecting');
@@ -131,12 +143,21 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     setChannelId(channel.id);
     setChannelName(channel.name);
 
-    const room = new Room({ adaptiveStream: true, dynacast: true });
-    roomRef.current = room;
-    const refresh = wire(room);
-
+    let room: Room | null = null;
     try {
-      const { url, token } = await api.post<VoiceTokenResponse>(`/api/channels/${channel.id}/voice-token`);
+      const { url, token, e2eeKey } = await api.post<VoiceTokenResponse>(`/api/channels/${channel.id}/voice-token`);
+
+      // E2EE: encrypt media frames in a worker with the room key from our server.
+      const keyProvider = new ExternalE2EEKeyProvider();
+      await keyProvider.setKey(e2eeKey);
+      const worker = new Worker(new URL('livekit-client/e2ee-worker', import.meta.url), { type: 'module' });
+      const options: RoomOptions = { adaptiveStream: true, dynacast: true, e2ee: { keyProvider, worker } };
+
+      room = new Room(options);
+      roomRef.current = room;
+      const refresh = wire(room);
+      await room.setE2EEEnabled(true);
+
       await room.connect(url, token);
       await room.localParticipant.setMicrophoneEnabled(true, { deviceId: micDeviceId, noiseSuppression: true, echoCancellation: true, autoGainControl: true });
       if (speakerDeviceId) {
@@ -155,7 +176,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
       reset();
       setError(err instanceof Error ? err.message : 'Could not connect');
       setStatus('error');
-      await room.disconnect();
+      if (room) await room.disconnect();
     }
   }
 
