@@ -1,9 +1,0 @@
-# VPS reverse proxy in front of LiveKit. Separate domain + cert from the home
-# app, per the agreed two-names design. LiveKit handles its own WebSocket/HTTP
-# on 7880; Caddy gives it TLS.
-#
-# Replace sfu.example.duckdns.org with your real DuckDNS hostname for the SFU.
-
-sfu.example.duckdns.org {
-	reverse_proxy livekit:7880
-}

@@ -1,0 +1,29 @@
+# One Caddy, two subdomains. Caddy auto-fetches Let's Encrypt certs (needs
+# Cloudflare records set to DNS-only / grey cloud, and ports 80+443 reachable).
+#
+# CHAT_DOMAIN and SFU_DOMAIN come from the environment (set in .env).
+
+{$CHAT_DOMAIN} {
+	encode zstd gzip
+
+	# API + WebSocket go to the Node backend.
+	handle /api/* {
+		reverse_proxy server:3001
+	}
+	handle /ws {
+		reverse_proxy server:3001
+	}
+
+	# Everything else is the web app (with SPA fallback for /invite, /join, …).
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}
+
+# Voice/screen signalling → LiveKit. Media itself is UDP straight to the VPS,
+# not through Caddy.
+{$SFU_DOMAIN} {
+	reverse_proxy livekit:7880
+}

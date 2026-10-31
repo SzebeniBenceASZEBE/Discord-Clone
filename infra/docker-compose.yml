@@ -1,0 +1,56 @@
+# Full production stack for one VPS: Caddy (TLS + routing) + the Node backend +
+# LiveKit. Reads infra/.env for domains + secrets.
+#
+#   cd infra && cp .env.example .env   # then fill it in
+#   docker compose up -d --build
+
+services:
+  caddy:
+    build:
+      context: ..
+      dockerfile: infra/caddy.Dockerfile
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      CHAT_DOMAIN: ${CHAT_DOMAIN}
+      SFU_DOMAIN: ${SFU_DOMAIN}
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - server
+      - livekit
+
+  server:
+    build:
+      context: ..
+      dockerfile: infra/server.Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATA_DIR: /app/data
+    volumes:
+      - ./data:/app/data   # SQLite + encrypted file blobs persist here on the VPS
+    expose:
+      - "3001"
+
+  livekit:
+    image: livekit/livekit-server:latest
+    restart: unless-stopped
+    command: --config /etc/livekit.yaml
+    environment:
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml:ro
+    ports:
+      - "7881:7881"                   # LiveKit TCP ICE fallback
+      - "50000-50100:50000-50100/udp" # LiveKit media (UDP, direct to clients)
+    expose:
+      - "7880"
+
+volumes:
+  caddy_data:
+  caddy_config:
