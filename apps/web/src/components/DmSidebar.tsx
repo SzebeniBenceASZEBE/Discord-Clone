@@ -1,4 +1,4 @@
-import type { DmSummary, FriendRequest, PresenceStatus, UserSummary } from '@dc/shared';
+import type { DmSummary, FriendRequest, PendingServerInvite, PresenceStatus, UserSummary } from '@dc/shared';
 import { theme, layout } from '../theme.ts';
 import { Avatar } from './Avatar.tsx';
 import { UserPanel } from './UserPanel.tsx';
@@ -61,12 +61,36 @@ function RequestRow({ req, onAccept, onDecline, onCancel }: { req: FriendRequest
   );
 }
 
+/** An incoming server invite, shown like a friend request but for a server. */
+function ServerInviteRow({ invite, onAccept, onDecline }: { invite: PendingServerInvite; onAccept: (id: string) => void; onDecline: (id: string) => void }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 8px', borderRadius: 4 }}>
+      <div style={{ width: 32, height: 32, flex: 'none', borderRadius: 10, background: invite.communityColor, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700 }}>{invite.communityLabel}</div>
+      <div style={{ flex: 1, overflow: 'hidden' }}>
+        <div style={{ color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{invite.communityName}</div>
+        <div style={{ color: theme.textMuted, fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>from {invite.inviterName}</div>
+      </div>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <IconButton title="Join" color={theme.green} onClick={() => onAccept(invite.id)}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4 4 10-10" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+        </IconButton>
+        <IconButton title="Ignore" color={theme.red} onClick={() => onDecline(invite.id)}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" /></svg>
+        </IconButton>
+      </div>
+    </div>
+  );
+}
+
 /** Home-view second column: DMs, friend requests, and your friends list. */
 export function DmSidebar({
   dms,
   friends,
   incoming,
   outgoing,
+  serverInvites,
+  onAcceptInvite,
+  onDeclineInvite,
   selectedConversationId,
   onSelectDm,
   onStartDm,
@@ -82,6 +106,9 @@ export function DmSidebar({
   friends: UserSummary[];
   incoming: FriendRequest[];
   outgoing: FriendRequest[];
+  serverInvites: PendingServerInvite[];
+  onAcceptInvite: (id: string) => void;
+  onDeclineInvite: (id: string) => void;
   selectedConversationId: string | null;
   onSelectDm: (dm: DmSummary) => void;
   onStartDm: (user: UserSummary) => void;
@@ -97,7 +124,7 @@ export function DmSidebar({
   // Friends you don't already have a DM open with — tap to start one.
   const inDm = new Set(dms.map((d) => d.otherUser.id));
   const friendsNotInDm = friends.filter((f) => !inDm.has(f.id));
-  const nothing = dms.length === 0 && friends.length === 0 && incoming.length === 0 && outgoing.length === 0;
+  const nothing = dms.length === 0 && friends.length === 0 && incoming.length === 0 && outgoing.length === 0 && serverInvites.length === 0;
 
   return (
     <aside style={{ width: layout.sidebarWidth, flex: 'none', background: theme.sidebar, display: 'flex', flexDirection: 'column' }}>
@@ -134,6 +161,11 @@ export function DmSidebar({
         {incoming.length > 0 && <div style={sectionLabel}>Friend Requests — {incoming.length}</div>}
         {incoming.map((r) => (
           <RequestRow key={r.id} req={r} onAccept={onAccept} onDecline={onDecline} onCancel={onCancel} />
+        ))}
+
+        {serverInvites.length > 0 && <div style={sectionLabel}>Server Invites — {serverInvites.length}</div>}
+        {serverInvites.map((inv) => (
+          <ServerInviteRow key={inv.id} invite={inv} onAccept={onAcceptInvite} onDecline={onDeclineInvite} />
         ))}
 
         {friendsNotInDm.length > 0 && <div style={sectionLabel}>Friends</div>}

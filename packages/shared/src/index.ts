@@ -183,6 +183,7 @@ export type ServerEvent =
   | { type: 'presence'; userId: Id; status: PresenceStatus }
   | { type: 'community.deleted'; communityId: Id }
   | { type: 'friend.changed' }
+  | { type: 'server-invite.changed' }
   | { type: 'password-reset.requested' };
 
 export type ClientEvent =
@@ -266,6 +267,17 @@ export interface ServerInviteInfo {
   reason?: 'unknown' | 'expired';
   communityName?: string;
   alreadyMember?: boolean;
+}
+
+/** A pending in-app server invite, as the invitee sees it (like a friend request). */
+export interface PendingServerInvite {
+  id: Id;
+  communityId: Id;
+  communityName: string;
+  communityLabel: string;
+  communityColor: string;
+  inviterName: string;
+  createdAt: UnixMillis;
 }
 
 /** Body of POST /api/conversations/:id/messages. */

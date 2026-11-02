@@ -183,6 +183,19 @@ function bootstrap(db: DatabaseSync): void {
     CREATE INDEX IF NOT EXISTS idx_friendships_addressee ON friendships(addressee_id);
     CREATE INDEX IF NOT EXISTS idx_friendships_requester ON friendships(requester_id);
 
+    -- In-app server invites: a member invites a specific user to a server. The
+    -- invitee sees it as a pending invite (like a friend request) and accepts to
+    -- join. One pending invite per (server, invitee).
+    CREATE TABLE IF NOT EXISTS server_member_invites (
+      id            TEXT PRIMARY KEY,
+      community_id  TEXT NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
+      inviter_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      invitee_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at    INTEGER NOT NULL,
+      UNIQUE (community_id, invitee_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_member_invites_invitee ON server_member_invites(invitee_id);
+
     -- Admin-mediated password resets. A user asks (status 'requested'); the
     -- admin hands out a one-time code (status 'issued', only its hash stored);
     -- using the code sets a new password and the row is deleted. At most one

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import type { Channel, Community, CreatedCommunity, CreatedInvite, CreatedServerInvite, DmSummary, FriendRelation, FriendsData, IssuedResetCode, PasswordResetItem, UserSummary } from '@dc/shared';
+import type { Channel, Community, CreatedCommunity, CreatedInvite, CreatedServerInvite, DmSummary, FriendRelation, FriendsData, IssuedResetCode, PasswordResetItem, PendingServerInvite, UserSummary } from '@dc/shared';
 import { theme } from './theme.ts';
 import { api } from './api.ts';
 import { useAuth } from './auth/AuthContext.tsx';
@@ -17,6 +17,7 @@ import { CreateServerModal } from './components/CreateServerModal.tsx';
 import { DeleteServerModal } from './components/DeleteServerModal.tsx';
 import { AddFriendModal } from './components/AddFriendModal.tsx';
 import { AdminPanel } from './components/AdminPanel.tsx';
+import { ServerInviteModal } from './components/ServerInviteModal.tsx';
 
 /**
  * The authenticated app. Owns navigation: home (DMs) vs a selected server, and
@@ -29,7 +30,7 @@ import { AdminPanel } from './components/AdminPanel.tsx';
  */
 export function AppShell() {
   const { user, logout } = useAuth();
-  const { onCommunityDeleted, onFriendChanged, onPasswordResetRequested } = useSocket();
+  const { connected, onCommunityDeleted, onFriendChanged, onServerInviteChanged, onPasswordResetRequested } = useSocket();
   const isMobile = useIsMobile();
 
   // Servers + channels.
@@ -45,6 +46,11 @@ export function AppShell() {
   const [friends, setFriends] = useState<FriendsData>({ friends: [], incoming: [], outgoing: [] });
   const [selectedDm, setSelectedDm] = useState<DmSummary | null>(null);
   const [showAddFriend, setShowAddFriend] = useState(false);
+
+  // In-app server invites: ones I've received, and which server the invite modal
+  // is open for (null = closed).
+  const [serverInvites, setServerInvites] = useState<PendingServerInvite[]>([]);
+  const [inviteFor, setInviteFor] = useState<Community | null>(null);
 
   // Admin: password-reset requests (only loaded/used when you're the admin).
   const [resets, setResets] = useState<PasswordResetItem[]>([]);
@@ -65,6 +71,7 @@ export function AppShell() {
     api.get<Community[]>('/api/communities').then(setCommunities);
     api.get<DmSummary[]>('/api/dms').then(setDms);
     api.get<FriendsData>('/api/friends').then(setFriends);
+    api.get<PendingServerInvite[]>('/api/me/server-invites').then(setServerInvites);
     // After joining a server via a /join link, land on it.
     const justJoined = searchParams.get('server');
     if (justJoined) {
@@ -178,6 +185,42 @@ export function AppShell() {
   // Live: refetch our friends whenever anything changes on either side.
   useEffect(() => onFriendChanged(() => void loadFriends()), [onFriendChanged]);
 
+  // --- In-app server invites. ---
+  const loadServerInvites = () => api.get<PendingServerInvite[]>('/api/me/server-invites').then(setServerInvites);
+
+  async function sendServerInvite(communityId: string, username: string) {
+    await api.post(`/api/communities/${communityId}/member-invites`, { username });
+  }
+  // The copy-link fallback in the invite modal: mint a link and copy it.
+  async function copyServerInviteLink(communityId: string) {
+    const created = await api.post<CreatedServerInvite>(`/api/communities/${communityId}/invites`);
+    await navigator.clipboard.writeText(created.url);
+  }
+  async function acceptServerInvite(id: string) {
+    const created = await api.post<CreatedCommunity>(`/api/me/server-invites/${id}/accept`);
+    setServerInvites((prev) => prev.filter((i) => i.id !== id));
+    setCommunities((prev) => (prev.some((c) => c.id === created.community.id) ? prev : [...prev, created.community]));
+    setSelectedCommunityId(created.community.id);
+    closeDrawerOnMobile();
+  }
+  async function declineServerInvite(id: string) {
+    await api.del(`/api/me/server-invites/${id}`);
+    setServerInvites((prev) => prev.filter((i) => i.id !== id));
+  }
+
+  // Live: a new/changed invite refreshes my pending list.
+  useEffect(() => onServerInviteChanged(() => void loadServerInvites()), [onServerInviteChanged]);
+
+  // Robustness: when the socket (re)connects, re-sync the things that arrive via
+  // one-shot events — so anything missed during a blip self-heals without F5.
+  useEffect(() => {
+    if (connected) {
+      void loadFriends();
+      void loadServerInvites();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connected]);
+
   // --- Admin: password resets (admin only). ---
   const isAdmin = user?.isAdmin === true;
   const loadResets = () => (isAdmin ? api.get<PasswordResetItem[]>('/api/admin/password-resets').then(setResets) : Promise.resolve());
@@ -214,17 +257,6 @@ export function AppShell() {
     try {
       const created = await api.post<CreatedInvite>('/api/invites');
       setInvite({ url: created.url, label: 'Account invite — single-use, expires in 7 days' });
-    } finally {
-      setInviteBusy(false);
-    }
-  }
-
-  async function makeServerInvite(communityId: string, name: string) {
-    setInviteBusy(true);
-    setCopied(false);
-    try {
-      const created = await api.post<CreatedServerInvite>(`/api/communities/${communityId}/invites`);
-      setInvite({ url: created.url, label: `Invite to ${name} — anyone logged in can join, expires in 7 days` });
     } finally {
       setInviteBusy(false);
     }
@@ -271,7 +303,7 @@ export function AppShell() {
         setSelectedChannelId(id);
         closeDrawerOnMobile();
       }}
-      onInvite={() => makeServerInvite(selectedCommunity.id, selectedCommunity.name)}
+      onInvite={() => setInviteFor(selectedCommunity)}
     />
   ) : (
     <DmSidebar
@@ -279,6 +311,9 @@ export function AppShell() {
       friends={friends.friends}
       incoming={friends.incoming}
       outgoing={friends.outgoing}
+      serverInvites={serverInvites}
+      onAcceptInvite={acceptServerInvite}
+      onDeclineInvite={declineServerInvite}
       selectedConversationId={selectedDm?.conversationId ?? null}
       onSelectDm={(dm) => {
         selectDm(dm);
@@ -379,6 +414,7 @@ export function AppShell() {
         {deleteTarget && <DeleteServerModal community={deleteTarget} onClose={() => setDeleteTarget(null)} onDelete={() => deleteServer(deleteTarget)} />}
         {showAddFriend && <AddFriendModal onClose={() => setShowAddFriend(false)} onSend={sendFriendRequest} />}
         {showAdmin && <AdminPanel resets={resets} onIssue={issueResetCode} onDismiss={dismissReset} onClose={() => setShowAdmin(false)} />}
+        {inviteFor && <ServerInviteModal communityId={inviteFor.id} communityName={inviteFor.name} friends={friends.friends} onInvite={sendServerInvite} onCopyLink={() => copyServerInviteLink(inviteFor.id)} onClose={() => setInviteFor(null)} />}
         {toast && <Toast message={toast} onClick={() => { setToast(null); setShowAdmin(true); }} />}
       </div>
     );
@@ -395,6 +431,7 @@ export function AppShell() {
       {deleteTarget && <DeleteServerModal community={deleteTarget} onClose={() => setDeleteTarget(null)} onDelete={() => deleteServer(deleteTarget)} />}
       {showAddFriend && <AddFriendModal onClose={() => setShowAddFriend(false)} onSend={sendFriendRequest} />}
       {showAdmin && <AdminPanel resets={resets} onIssue={issueResetCode} onDismiss={dismissReset} onClose={() => setShowAdmin(false)} />}
+      {inviteFor && <ServerInviteModal communityId={inviteFor.id} communityName={inviteFor.name} friends={friends.friends} onInvite={sendServerInvite} onCopyLink={() => copyServerInviteLink(inviteFor.id)} onClose={() => setInviteFor(null)} />}
       {toast && <Toast message={toast} onClick={() => { setToast(null); setShowAdmin(true); }} />}
     </div>
   );

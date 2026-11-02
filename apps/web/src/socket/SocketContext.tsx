@@ -11,6 +11,7 @@ import type { ClientEvent, Message, ServerEvent } from '@dc/shared';
 type MessageHandler = (message: Message) => void;
 type CommunityDeletedHandler = (communityId: string) => void;
 type FriendChangedHandler = () => void;
+type ServerInviteChangedHandler = () => void;
 type PasswordResetRequestedHandler = () => void;
 
 interface SocketApi {
@@ -20,6 +21,7 @@ interface SocketApi {
   onMessageCreated: (handler: MessageHandler) => () => void;
   onCommunityDeleted: (handler: CommunityDeletedHandler) => () => void;
   onFriendChanged: (handler: FriendChangedHandler) => () => void;
+  onServerInviteChanged: (handler: ServerInviteChangedHandler) => () => void;
   onPasswordResetRequested: (handler: PasswordResetRequestedHandler) => () => void;
 }
 
@@ -31,6 +33,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
   const handlers = useRef<Set<MessageHandler>>(new Set());
   const communityDeletedHandlers = useRef<Set<CommunityDeletedHandler>>(new Set());
   const friendChangedHandlers = useRef<Set<FriendChangedHandler>>(new Set());
+  const serverInviteChangedHandlers = useRef<Set<ServerInviteChangedHandler>>(new Set());
   const passwordResetHandlers = useRef<Set<PasswordResetRequestedHandler>>(new Set());
   const [connected, setConnected] = useState(false);
 
@@ -58,6 +61,8 @@ export function SocketProvider({ children }: { children: ReactNode }) {
           for (const handler of communityDeletedHandlers.current) handler(event.communityId);
         } else if (event.type === 'friend.changed') {
           for (const handler of friendChangedHandlers.current) handler();
+        } else if (event.type === 'server-invite.changed') {
+          for (const handler of serverInviteChangedHandlers.current) handler();
         } else if (event.type === 'password-reset.requested') {
           for (const handler of passwordResetHandlers.current) handler();
         }
@@ -113,6 +118,13 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  const onServerInviteChanged = useCallback((handler: ServerInviteChangedHandler) => {
+    serverInviteChangedHandlers.current.add(handler);
+    return () => {
+      serverInviteChangedHandlers.current.delete(handler);
+    };
+  }, []);
+
   const onPasswordResetRequested = useCallback((handler: PasswordResetRequestedHandler) => {
     passwordResetHandlers.current.add(handler);
     return () => {
@@ -120,7 +132,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  return <SocketCtx.Provider value={{ connected, subscribe, unsubscribe, onMessageCreated, onCommunityDeleted, onFriendChanged, onPasswordResetRequested }}>{children}</SocketCtx.Provider>;
+  return <SocketCtx.Provider value={{ connected, subscribe, unsubscribe, onMessageCreated, onCommunityDeleted, onFriendChanged, onServerInviteChanged, onPasswordResetRequested }}>{children}</SocketCtx.Provider>;
 }
 
 export function useSocket(): SocketApi {

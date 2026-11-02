@@ -7,6 +7,7 @@ import { makeRequireAuth } from '../auth/guard.ts';
 import type { Hub } from '../realtime/hub.ts';
 import { createCommunity, deleteCommunity, getCommunity, isDefaultCommunity, isMember, listChannels, listCommunitiesForUser, listMembers } from './store.ts';
 import { acceptServerInvite, createServerInvite, validateServerInvite } from './invites.ts';
+import { acceptMemberInvite, declineMemberInvite, inviteMember, listPendingInvites } from './memberInvites.ts';
 
 interface CommunityOptions {
   db: DatabaseSync;
@@ -90,6 +91,45 @@ export function communityRoutes(opts: CommunityOptions) {
       const { token, expiresAt } = createServerInvite(db, id, req.user!.id);
       const out: CreatedServerInvite = { token, url: `${appUrl}/join/${token}`, expiresAt };
       return reply.code(201).send(out);
+    });
+
+    // POST /api/communities/:id/member-invites — invite a user in-app by username.
+    app.post('/api/communities/:id/member-invites', { preHandler: requireAuth }, async (req, reply) => {
+      const { id } = req.params as { id: string };
+      if (!isMember(db, id, req.user!.id)) return reply.code(403).send({ error: 'not a member of this server' });
+      const body = (req.body ?? {}) as { username?: string };
+      const username = (body.username ?? '').trim().toLowerCase();
+      if (!username) return reply.code(400).send({ error: 'username required' });
+      const invitee = db.prepare(`SELECT id FROM users WHERE username = ?`).get(username) as { id: string } | undefined;
+      if (!invitee) return reply.code(404).send({ error: 'no user with that username' });
+
+      const result = inviteMember(db, id, req.user!.id, invitee.id);
+      if (!result.ok) return reply.code(409).send({ error: 'they are already in this server' });
+      if (result.created) hub.sendToUser(invitee.id, { type: 'server-invite.changed' });
+      return reply.code(201).send({ ok: true });
+    });
+
+    // GET /api/me/server-invites — my pending in-app server invites.
+    app.get('/api/me/server-invites', { preHandler: requireAuth }, async (req) => {
+      return listPendingInvites(db, req.user!.id);
+    });
+
+    // POST /api/me/server-invites/:id/accept — join the server.
+    app.post('/api/me/server-invites/:id/accept', { preHandler: requireAuth }, async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const result = acceptMemberInvite(db, id, req.user!.id);
+      if (!result.ok) return reply.code(404).send({ error: 'invite not found' });
+      const community = getCommunity(db, result.communityId);
+      if (!community) return reply.code(404).send({ error: 'server not found' });
+      const out: CreatedCommunity = { community, channels: listChannels(db, result.communityId) };
+      return reply.code(200).send(out);
+    });
+
+    // DELETE /api/me/server-invites/:id — decline an invite.
+    app.delete('/api/me/server-invites/:id', { preHandler: requireAuth }, async (req, reply) => {
+      const { id } = req.params as { id: string };
+      if (!declineMemberInvite(db, id, req.user!.id)) return reply.code(404).send({ error: 'invite not found' });
+      return { ok: true };
     });
 
     // GET /api/server-invites/:token — preview a join link (must be logged in).
