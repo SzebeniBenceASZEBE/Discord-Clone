@@ -44,7 +44,9 @@ export function DeleteServerModal({ community, onClose, onDelete }: { community:
           </div>
           {error && <div style={errorStyle}>{error}</div>}
           <label style={labelStyle} htmlFor="confirm-name">
-            Type <span style={{ color: '#f2f3f5', fontWeight: 600 }}>{community.name}</span> to confirm
+            {/* The name keeps its real casing (textTransform:none) — the match is
+                case-sensitive, so showing it upper-cased would mislead. */}
+            Type <span style={{ color: '#f2f3f5', fontWeight: 600, textTransform: 'none' }}>{community.name}</span> to confirm
           </label>
           <input id="confirm-name" className="auth-input" value={typed} onChange={(e) => setTyped(e.target.value)} autoFocus autoComplete="off" />
           <div style={{ display: 'flex', gap: 8, marginTop: 18 }}>
