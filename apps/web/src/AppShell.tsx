@@ -4,6 +4,7 @@ import type { Channel, Community, CreatedCommunity, CreatedInvite, CreatedServer
 import { theme } from './theme.ts';
 import { api } from './api.ts';
 import { useAuth } from './auth/AuthContext.tsx';
+import { useSocket } from './socket/SocketContext.tsx';
 import { useIsMobile } from './useIsMobile.ts';
 import { ServerRail } from './components/ServerRail.tsx';
 import { DmSidebar } from './components/DmSidebar.tsx';
@@ -13,6 +14,7 @@ import { ChannelList } from './chat/ChannelList.tsx';
 import { ChatView } from './chat/ChatView.tsx';
 import { VoiceStage } from './voice/VoiceStage.tsx';
 import { CreateServerModal } from './components/CreateServerModal.tsx';
+import { DeleteServerModal } from './components/DeleteServerModal.tsx';
 
 /**
  * The authenticated app. Owns navigation: home (DMs) vs a selected server, and
@@ -25,6 +27,7 @@ import { CreateServerModal } from './components/CreateServerModal.tsx';
  */
 export function AppShell() {
   const { user, logout } = useAuth();
+  const { onCommunityDeleted } = useSocket();
   const isMobile = useIsMobile();
 
   // Servers + channels.
@@ -33,6 +36,7 @@ export function AppShell() {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Community | null>(null);
 
   // DMs.
   const [dms, setDms] = useState<DmSummary[]>([]);
@@ -99,6 +103,28 @@ export function AppShell() {
     setSelectedChannelId(created.channels.find((c) => c.kind === 'text')?.id ?? null);
   }
 
+  // Drop a server from the rail. Also used when someone else deletes it: if
+  // we're currently looking at it, fall back to Home so we're not staring at a
+  // server that no longer exists.
+  function removeCommunity(id: string) {
+    setCommunities((prev) => prev.filter((c) => c.id !== id));
+    setSelectedCommunityId((cur) => (cur === id ? null : cur));
+  }
+
+  async function deleteServer(community: Community) {
+    await api.del<void>(`/api/communities/${community.id}`);
+    removeCommunity(community.id);
+  }
+
+  // Live removal: the server tells every client when a server is deleted.
+  useEffect(() => onCommunityDeleted(removeCommunity), [onCommunityDeleted]);
+
+  // Who may delete a given server: its owner, or the admin (you). The default
+  // Main Hall is never deletable.
+  function canDeleteCommunity(c: Community): boolean {
+    return !c.isDefault && (c.ownerId === user?.id || user?.isAdmin === true);
+  }
+
   function selectDm(dm: DmSummary) {
     setSelectedCommunityId(null);
     setSelectedDm(dm);
@@ -159,6 +185,8 @@ export function AppShell() {
       onSelectHome={() => setSelectedCommunityId(null)}
       onSelectCommunity={setSelectedCommunityId}
       onCreate={() => setShowCreate(true)}
+      canDelete={canDeleteCommunity}
+      onRequestDelete={setDeleteTarget}
     />
   );
 
@@ -267,6 +295,7 @@ export function AppShell() {
         </div>
 
         {showCreate && <CreateServerModal onClose={() => setShowCreate(false)} onCreate={createServer} />}
+        {deleteTarget && <DeleteServerModal community={deleteTarget} onClose={() => setDeleteTarget(null)} onDelete={() => deleteServer(deleteTarget)} />}
       </div>
     );
   }
@@ -279,6 +308,7 @@ export function AppShell() {
       {mainPane}
       {selectedCommunity ? <MemberList communityId={selectedCommunity.id} /> : !selectedDm ? <ActiveNow /> : null}
       {showCreate && <CreateServerModal onClose={() => setShowCreate(false)} onCreate={createServer} />}
+      {deleteTarget && <DeleteServerModal community={deleteTarget} onClose={() => setDeleteTarget(null)} onDelete={() => deleteServer(deleteTarget)} />}
     </div>
   );
 }

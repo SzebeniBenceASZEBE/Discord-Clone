@@ -47,4 +47,20 @@ export class Hub {
       }
     }
   }
+
+  /**
+   * Push an event to every live connection, regardless of what they're
+   * watching. For app-wide news like a server being deleted, which isn't tied
+   * to a single channel subscription.
+   */
+  broadcastAll(event: ServerEvent): void {
+    const data = JSON.stringify(event);
+    for (const conn of this.connections) {
+      try {
+        conn.send(data);
+      } catch {
+        // Socket already gone; its close handler will remove it.
+      }
+    }
+  }
 }

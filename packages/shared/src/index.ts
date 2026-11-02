@@ -32,6 +32,8 @@ export interface Community {
   /** Rail icon background color. */
   color: string;
   ownerId: Id;
+  /** The auto-joined "everyone" server (Main Hall). It can't be deleted. */
+  isDefault: boolean;
 }
 
 export type ChannelKind = 'text' | 'voice';
@@ -113,7 +115,8 @@ export type ServerEvent =
   | { type: 'hello'; userId: Id; serverTime: UnixMillis }
   | { type: 'message.created'; message: Message }
   | { type: 'message.edited'; message: Message }
-  | { type: 'presence'; userId: Id; status: PresenceStatus };
+  | { type: 'presence'; userId: Id; status: PresenceStatus }
+  | { type: 'community.deleted'; communityId: Id };
 
 export type ClientEvent =
   | { type: 'subscribe'; conversationId: Id }

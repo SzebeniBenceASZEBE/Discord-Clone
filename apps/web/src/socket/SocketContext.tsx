@@ -9,12 +9,14 @@ import type { ClientEvent, Message, ServerEvent } from '@dc/shared';
  * whatever was being watched, so a dropped connection self-heals.
  */
 type MessageHandler = (message: Message) => void;
+type CommunityDeletedHandler = (communityId: string) => void;
 
 interface SocketApi {
   connected: boolean;
   subscribe: (channelId: string) => void;
   unsubscribe: (channelId: string) => void;
   onMessageCreated: (handler: MessageHandler) => () => void;
+  onCommunityDeleted: (handler: CommunityDeletedHandler) => () => void;
 }
 
 const SocketCtx = createContext<SocketApi | null>(null);
@@ -23,6 +25,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
   const wsRef = useRef<WebSocket | null>(null);
   const subscriptions = useRef<Set<string>>(new Set());
   const handlers = useRef<Set<MessageHandler>>(new Set());
+  const communityDeletedHandlers = useRef<Set<CommunityDeletedHandler>>(new Set());
   const [connected, setConnected] = useState(false);
 
   useEffect(() => {
@@ -45,6 +48,8 @@ export function SocketProvider({ children }: { children: ReactNode }) {
         const event = JSON.parse(ev.data) as ServerEvent;
         if (event.type === 'message.created') {
           for (const handler of handlers.current) handler(event.message);
+        } else if (event.type === 'community.deleted') {
+          for (const handler of communityDeletedHandlers.current) handler(event.communityId);
         }
       };
       ws.onclose = () => {
@@ -84,7 +89,14 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  return <SocketCtx.Provider value={{ connected, subscribe, unsubscribe, onMessageCreated }}>{children}</SocketCtx.Provider>;
+  const onCommunityDeleted = useCallback((handler: CommunityDeletedHandler) => {
+    communityDeletedHandlers.current.add(handler);
+    return () => {
+      communityDeletedHandlers.current.delete(handler);
+    };
+  }, []);
+
+  return <SocketCtx.Provider value={{ connected, subscribe, unsubscribe, onMessageCreated, onCommunityDeleted }}>{children}</SocketCtx.Provider>;
 }
 
 export function useSocket(): SocketApi {

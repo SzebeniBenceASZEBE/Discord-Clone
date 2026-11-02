@@ -1,19 +1,22 @@
+import { unlinkSync } from 'node:fs';
+import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import type { DatabaseSync } from 'node:sqlite';
 import type { CreateCommunityRequest, CreatedCommunity, CreatedServerInvite, ServerInviteInfo } from '@dc/shared';
 import { makeRequireAuth } from '../auth/guard.ts';
 import type { Hub } from '../realtime/hub.ts';
-import { createCommunity, getCommunity, isMember, listChannels, listCommunitiesForUser, listMembers } from './store.ts';
+import { createCommunity, deleteCommunity, getCommunity, isDefaultCommunity, isMember, listChannels, listCommunitiesForUser, listMembers } from './store.ts';
 import { acceptServerInvite, createServerInvite, validateServerInvite } from './invites.ts';
 
 interface CommunityOptions {
   db: DatabaseSync;
   appUrl: string;
   hub: Hub;
+  dataDir: string;
 }
 
 export function communityRoutes(opts: CommunityOptions) {
-  const { db, appUrl, hub } = opts;
+  const { db, appUrl, hub, dataDir } = opts;
   const requireAuth = makeRequireAuth(db);
 
   return async function (app: FastifyInstance): Promise<void> {
@@ -48,6 +51,34 @@ export function communityRoutes(opts: CommunityOptions) {
         return reply.code(403).send({ error: 'not a member of this server' });
       }
       return listMembers(db, id, hub);
+    });
+
+    // DELETE /api/communities/:id — permanently delete a server and its data.
+    // Allowed for the server's owner or the admin (you); the default Main Hall
+    // is protected. Removes messages, attachment rows + files, channels,
+    // members and invites, then tells every client to drop it live.
+    app.delete('/api/communities/:id', { preHandler: requireAuth }, async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const community = getCommunity(db, id);
+      if (!community) return reply.code(404).send({ error: 'server not found' });
+      if (isDefaultCommunity(db, id)) return reply.code(403).send({ error: 'the default server cannot be deleted' });
+      if (community.ownerId !== req.user!.id && !req.user!.isAdmin) {
+        return reply.code(403).send({ error: 'only the server owner or an admin can delete this server' });
+      }
+
+      const { attachmentIds } = deleteCommunity(db, id);
+      // DB rows are gone; now remove the encrypted blobs from disk. Best-effort:
+      // a missing file just means it was already cleaned up.
+      for (const attId of attachmentIds) {
+        try {
+          unlinkSync(join(dataDir, 'files', attId));
+        } catch {
+          /* already gone */
+        }
+      }
+
+      hub.broadcastAll({ type: 'community.deleted', communityId: id });
+      return reply.code(204).send();
     });
 
     // POST /api/communities/:id/invites — any member can mint a join link.

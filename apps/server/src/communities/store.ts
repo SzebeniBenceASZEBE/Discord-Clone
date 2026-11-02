@@ -50,24 +50,33 @@ export function createCommunity(db: DatabaseSync, ownerId: string, name: string,
     throw err;
   }
 
-  return { community: { id, name, label, color, ownerId }, channels: listChannels(db, id) };
+  return { community: { id, name, label, color, ownerId, isDefault: opts.isDefault ?? false }, channels: listChannels(db, id) };
+}
+
+// SQLite has no boolean type, so is_default comes back as 0/1 — map it to a real
+// boolean here so the rest of the app (and the shared type) sees a clean shape.
+type CommunityRow = { id: string; name: string; label: string; color: string; ownerId: string; isDefault: number };
+function toCommunity(r: CommunityRow): Community {
+  return { id: r.id, name: r.name, label: r.label, color: r.color, ownerId: r.ownerId, isDefault: r.isDefault === 1 };
 }
 
 /** Communities the user belongs to (drives their server rail). */
 export function listCommunitiesForUser(db: DatabaseSync, userId: string): Community[] {
-  return db
+  const rows = db
     .prepare(
-      `SELECT c.id, c.name, c.label, c.color, c.owner_id AS ownerId
+      `SELECT c.id, c.name, c.label, c.color, c.owner_id AS ownerId, c.is_default AS isDefault
        FROM communities c JOIN community_members m ON m.community_id = c.id
        WHERE m.user_id = ? ORDER BY c.created_at`,
     )
-    .all(userId) as unknown as Community[];
+    .all(userId) as unknown as CommunityRow[];
+  return rows.map(toCommunity);
 }
 
 export function getCommunity(db: DatabaseSync, communityId: string): Community | undefined {
-  return db
-    .prepare(`SELECT id, name, label, color, owner_id AS ownerId FROM communities WHERE id = ?`)
-    .get(communityId) as Community | undefined;
+  const row = db
+    .prepare(`SELECT id, name, label, color, owner_id AS ownerId, is_default AS isDefault FROM communities WHERE id = ?`)
+    .get(communityId) as CommunityRow | undefined;
+  return row ? toCommunity(row) : undefined;
 }
 
 /** Everyone in a community, with live online status (for the member list). */
@@ -115,6 +124,50 @@ export function isMember(db: DatabaseSync, communityId: string, userId: string):
 
 export function isOwner(db: DatabaseSync, communityId: string, userId: string): boolean {
   return !!db.prepare(`SELECT 1 FROM communities WHERE id = ? AND owner_id = ?`).get(communityId, userId);
+}
+
+/** The auto-joined "everyone" server — protected from deletion. */
+export function isDefaultCommunity(db: DatabaseSync, communityId: string): boolean {
+  return !!db.prepare(`SELECT 1 FROM communities WHERE id = ? AND is_default = 1`).get(communityId);
+}
+
+/**
+ * Permanently delete a community and everything stored under it — channels,
+ * members, invites (all via ON DELETE CASCADE), plus every message and
+ * attachment row in its channels. Messages have no foreign key to channels
+ * (a conversation id can point at a channel OR a DM), so they're deleted by
+ * hand here. Returns the ids of attachment files the caller must remove from
+ * disk; the DB rows are already gone. Everything runs in one transaction, so a
+ * mid-way failure rolls back and leaves the server fully intact.
+ */
+export function deleteCommunity(db: DatabaseSync, communityId: string): { attachmentIds: string[] } {
+  // A channel's id is also its conversation id for messages/attachments.
+  const channelIds = (db.prepare(`SELECT id FROM channels WHERE community_id = ?`).all(communityId) as { id: string }[]).map((r) => r.id);
+
+  // Collect attachment file ids up front (both sent and still-unsent uploads)
+  // so we can unlink the encrypted blobs after the rows are gone.
+  let attachmentIds: string[] = [];
+  if (channelIds.length > 0) {
+    const placeholders = channelIds.map(() => '?').join(',');
+    attachmentIds = (db.prepare(`SELECT id FROM attachments WHERE conversation_id IN (${placeholders})`).all(...channelIds) as { id: string }[]).map((r) => r.id);
+  }
+
+  db.exec('BEGIN');
+  try {
+    if (channelIds.length > 0) {
+      const placeholders = channelIds.map(() => '?').join(',');
+      db.prepare(`DELETE FROM messages WHERE conversation_id IN (${placeholders})`).run(...channelIds);
+      db.prepare(`DELETE FROM attachments WHERE conversation_id IN (${placeholders})`).run(...channelIds);
+    }
+    // Deleting the community row cascades to channels, members and invites.
+    db.prepare(`DELETE FROM communities WHERE id = ?`).run(communityId);
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
+
+  return { attachmentIds };
 }
 
 /** Look up a single channel (used by the messaging layer to find its community). */

@@ -13,6 +13,8 @@ export const theme = {
   blurple: '#5865f2',
   blurpleHover: '#4752c4',
   green: '#23a55a',
+  red: '#da373c',
+  redHover: '#a12829',
   divider: '#2d2f32',
   hover: '#35373c',
 } as const;
