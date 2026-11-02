@@ -63,4 +63,21 @@ export class Hub {
       }
     }
   }
+
+  /**
+   * Push an event to one user, on every device they're connected from. Used for
+   * things aimed at a person rather than a channel — e.g. "you got a friend
+   * request". No-op if they're offline (they'll see it on next load).
+   */
+  sendToUser(userId: string, event: ServerEvent): void {
+    const data = JSON.stringify(event);
+    for (const conn of this.connections) {
+      if (conn.userId !== userId) continue;
+      try {
+        conn.send(data);
+      } catch {
+        // Socket already gone; its close handler will remove it.
+      }
+    }
+  }
 }

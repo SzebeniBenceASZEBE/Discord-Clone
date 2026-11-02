@@ -12,6 +12,7 @@ import { ensureDefaults } from './communities/store.ts';
 import { messageRoutes } from './messages/routes.ts';
 import { resolveAccess } from './messages/access.ts';
 import { dmRoutes } from './dm/routes.ts';
+import { friendRoutes } from './friends/routes.ts';
 import { fileRoutes } from './files/routes.ts';
 import { voiceRoutes } from './voice/routes.ts';
 import { Hub } from './realtime/hub.ts';
@@ -64,8 +65,11 @@ await app.register(communityRoutes({ db, appUrl: APP_URL, hub, dataDir: DATA_DIR
 // Messages (channels + DMs): /api/conversations/:id/messages
 await app.register(messageRoutes({ db, hub }));
 
-// Direct messages: /api/users, /api/dms
+// Direct messages: /api/dms (friends-only)
 await app.register(dmRoutes({ db, hub }));
+
+// Friends: request / accept / decline / unfriend
+await app.register(friendRoutes({ db, hub }));
 
 // File attachments: upload to a conversation, download by id
 await app.register(fileRoutes({ db, dataDir: DATA_DIR }));

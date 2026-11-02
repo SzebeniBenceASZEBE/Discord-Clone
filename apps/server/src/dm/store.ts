@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
-import type { DmSummary, UserSummary } from '@dc/shared';
+import type { DmSummary } from '@dc/shared';
 import type { Hub } from '../realtime/hub.ts';
 
 /**
@@ -38,20 +38,6 @@ export function openDm(db: DatabaseSync, a: string, b: string): { id: string } {
   const id = randomUUID();
   db.prepare(`INSERT INTO dm_conversations (id, user_lo, user_hi, created_at) VALUES (?, ?, ?, ?)`).run(id, lo, hi, Date.now());
   return { id };
-}
-
-interface UserRow {
-  id: string;
-  username: string;
-  displayName: string;
-}
-
-/** Every other user — the people you can start a DM with. */
-export function listOtherUsers(db: DatabaseSync, selfId: string, hub: Hub): UserSummary[] {
-  const rows = db
-    .prepare(`SELECT id, username, display_name AS displayName FROM users WHERE id != ? ORDER BY display_name`)
-    .all(selfId) as unknown as UserRow[];
-  return rows.map((u) => ({ id: u.id, username: u.username, displayName: u.displayName, status: hub.isOnline(u.id) ? 'online' : 'offline' }));
 }
 
 /** The DM conversations this user is part of, with the other participant. */

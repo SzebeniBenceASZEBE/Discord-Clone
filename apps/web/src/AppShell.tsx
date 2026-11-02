@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import type { Channel, Community, CreatedCommunity, CreatedInvite, CreatedServerInvite, DmSummary, UserSummary } from '@dc/shared';
+import type { Channel, Community, CreatedCommunity, CreatedInvite, CreatedServerInvite, DmSummary, FriendRelation, FriendsData, UserSummary } from '@dc/shared';
 import { theme } from './theme.ts';
 import { api } from './api.ts';
 import { useAuth } from './auth/AuthContext.tsx';
@@ -15,6 +15,7 @@ import { ChatView } from './chat/ChatView.tsx';
 import { VoiceStage } from './voice/VoiceStage.tsx';
 import { CreateServerModal } from './components/CreateServerModal.tsx';
 import { DeleteServerModal } from './components/DeleteServerModal.tsx';
+import { AddFriendModal } from './components/AddFriendModal.tsx';
 
 /**
  * The authenticated app. Owns navigation: home (DMs) vs a selected server, and
@@ -27,7 +28,7 @@ import { DeleteServerModal } from './components/DeleteServerModal.tsx';
  */
 export function AppShell() {
   const { user, logout } = useAuth();
-  const { onCommunityDeleted } = useSocket();
+  const { onCommunityDeleted, onFriendChanged } = useSocket();
   const isMobile = useIsMobile();
 
   // Servers + channels.
@@ -38,10 +39,11 @@ export function AppShell() {
   const [showCreate, setShowCreate] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Community | null>(null);
 
-  // DMs.
+  // DMs + friends.
   const [dms, setDms] = useState<DmSummary[]>([]);
-  const [users, setUsers] = useState<UserSummary[]>([]);
+  const [friends, setFriends] = useState<FriendsData>({ friends: [], incoming: [], outgoing: [] });
   const [selectedDm, setSelectedDm] = useState<DmSummary | null>(null);
+  const [showAddFriend, setShowAddFriend] = useState(false);
 
   // Invites (account invite or server invite — same banner).
   const [invite, setInvite] = useState<{ url: string; label: string } | null>(null);
@@ -56,7 +58,7 @@ export function AppShell() {
   useEffect(() => {
     api.get<Community[]>('/api/communities').then(setCommunities);
     api.get<DmSummary[]>('/api/dms').then(setDms);
-    api.get<UserSummary[]>('/api/users').then(setUsers);
+    api.get<FriendsData>('/api/friends').then(setFriends);
     // After joining a server via a /join link, land on it.
     const justJoined = searchParams.get('server');
     if (justJoined) {
@@ -136,6 +138,40 @@ export function AppShell() {
     selectDm(dm);
   }
 
+  // --- Friends. Each mutation returns the fresh FriendsData; the server also
+  // pushes friend.changed to the *other* person so their list updates live. ---
+  const loadFriends = () => api.get<FriendsData>('/api/friends').then(setFriends);
+
+  async function sendFriendRequest(username: string) {
+    setFriends(await api.post<FriendsData>('/api/friends/requests', { username }));
+  }
+  async function acceptRequest(id: string) {
+    setFriends(await api.post<FriendsData>(`/api/friends/requests/${id}/accept`));
+  }
+  async function removeRequest(id: string) {
+    setFriends(await api.del<FriendsData>(`/api/friends/requests/${id}`));
+  }
+
+  // Our relationship to another user, so the member list knows which control to
+  // show (add / pending / nothing).
+  function relationshipOf(userId: string): FriendRelation {
+    if (userId === user?.id) return 'self';
+    if (friends.friends.some((f) => f.id === userId)) return 'friend';
+    if (friends.incoming.some((r) => r.user.id === userId)) return 'incoming';
+    if (friends.outgoing.some((r) => r.user.id === userId)) return 'outgoing';
+    return 'none';
+  }
+
+  // Add-friend from the member list: send by username (the server auto-accepts
+  // if they'd already requested us). Errors are swallowed here — the dedicated
+  // Add Friend modal is where we surface "already friends" etc.
+  function addFriendByUsername(username: string) {
+    sendFriendRequest(username).catch(() => {});
+  }
+
+  // Live: refetch our friends whenever anything changes on either side.
+  useEffect(() => onFriendChanged(() => void loadFriends()), [onFriendChanged]);
+
   async function makeInvite() {
     setInviteBusy(true);
     setCopied(false);
@@ -204,7 +240,9 @@ export function AppShell() {
   ) : (
     <DmSidebar
       dms={dms}
-      users={users}
+      friends={friends.friends}
+      incoming={friends.incoming}
+      outgoing={friends.outgoing}
       selectedConversationId={selectedDm?.conversationId ?? null}
       onSelectDm={(dm) => {
         selectDm(dm);
@@ -214,6 +252,10 @@ export function AppShell() {
         startDm(u);
         closeDrawerOnMobile();
       }}
+      onAddFriend={() => setShowAddFriend(true)}
+      onAccept={acceptRequest}
+      onDecline={removeRequest}
+      onCancel={removeRequest}
     />
   );
 
@@ -259,7 +301,7 @@ export function AppShell() {
         <ChatView conversationId={active.id} composerPlaceholder={active.placeholder} emptyLabel={active.empty} />
       ) : (
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.textMuted, textAlign: 'center', padding: 24 }}>
-          {selectedCommunity ? 'Pick a text channel to start chatting.' : 'Pick a conversation, or click someone under People to start a DM.'}
+          {selectedCommunity ? 'Pick a text channel to start chatting.' : 'Pick a conversation, or start a DM with a friend.'}
         </div>
       )}
     </main>
@@ -296,6 +338,7 @@ export function AppShell() {
 
         {showCreate && <CreateServerModal onClose={() => setShowCreate(false)} onCreate={createServer} />}
         {deleteTarget && <DeleteServerModal community={deleteTarget} onClose={() => setDeleteTarget(null)} onDelete={() => deleteServer(deleteTarget)} />}
+        {showAddFriend && <AddFriendModal onClose={() => setShowAddFriend(false)} onSend={sendFriendRequest} />}
       </div>
     );
   }
@@ -306,9 +349,10 @@ export function AppShell() {
       {serverRail}
       {sidebar}
       {mainPane}
-      {selectedCommunity ? <MemberList communityId={selectedCommunity.id} /> : !selectedDm ? <ActiveNow /> : null}
+      {selectedCommunity ? <MemberList communityId={selectedCommunity.id} relationshipOf={relationshipOf} onAddFriend={addFriendByUsername} /> : !selectedDm ? <ActiveNow /> : null}
       {showCreate && <CreateServerModal onClose={() => setShowCreate(false)} onCreate={createServer} />}
       {deleteTarget && <DeleteServerModal community={deleteTarget} onClose={() => setDeleteTarget(null)} onDelete={() => deleteServer(deleteTarget)} />}
+      {showAddFriend && <AddFriendModal onClose={() => setShowAddFriend(false)} onSend={sendFriendRequest} />}
     </div>
   );
 }

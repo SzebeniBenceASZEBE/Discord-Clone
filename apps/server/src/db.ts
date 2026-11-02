@@ -163,5 +163,24 @@ function bootstrap(db: DatabaseSync): void {
     );
 
     CREATE INDEX IF NOT EXISTS idx_attachments_message ON attachments(message_id);
+
+    -- Friendships. One row per relationship (not per direction): requester_id
+    -- asked addressee_id. status goes 'pending' -> 'accepted'. We keep the pair
+    -- ordered in the UNIQUE index below so A↔B can't exist twice.
+    CREATE TABLE IF NOT EXISTS friendships (
+      id            TEXT PRIMARY KEY,
+      requester_id  TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      addressee_id  TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      status        TEXT NOT NULL,   -- 'pending' | 'accepted'
+      created_at    INTEGER NOT NULL,
+      responded_at  INTEGER
+    );
+
+    -- Enforce one relationship per unordered pair: least(a,b) + greatest(a,b)
+    -- is unique regardless of who sent the request.
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_friendships_pair
+      ON friendships(MIN(requester_id, addressee_id), MAX(requester_id, addressee_id));
+    CREATE INDEX IF NOT EXISTS idx_friendships_addressee ON friendships(addressee_id);
+    CREATE INDEX IF NOT EXISTS idx_friendships_requester ON friendships(requester_id);
   `);
 }

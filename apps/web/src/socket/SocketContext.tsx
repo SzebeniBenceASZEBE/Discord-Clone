@@ -10,6 +10,7 @@ import type { ClientEvent, Message, ServerEvent } from '@dc/shared';
  */
 type MessageHandler = (message: Message) => void;
 type CommunityDeletedHandler = (communityId: string) => void;
+type FriendChangedHandler = () => void;
 
 interface SocketApi {
   connected: boolean;
@@ -17,6 +18,7 @@ interface SocketApi {
   unsubscribe: (channelId: string) => void;
   onMessageCreated: (handler: MessageHandler) => () => void;
   onCommunityDeleted: (handler: CommunityDeletedHandler) => () => void;
+  onFriendChanged: (handler: FriendChangedHandler) => () => void;
 }
 
 const SocketCtx = createContext<SocketApi | null>(null);
@@ -26,6 +28,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
   const subscriptions = useRef<Set<string>>(new Set());
   const handlers = useRef<Set<MessageHandler>>(new Set());
   const communityDeletedHandlers = useRef<Set<CommunityDeletedHandler>>(new Set());
+  const friendChangedHandlers = useRef<Set<FriendChangedHandler>>(new Set());
   const [connected, setConnected] = useState(false);
 
   useEffect(() => {
@@ -50,6 +53,8 @@ export function SocketProvider({ children }: { children: ReactNode }) {
           for (const handler of handlers.current) handler(event.message);
         } else if (event.type === 'community.deleted') {
           for (const handler of communityDeletedHandlers.current) handler(event.communityId);
+        } else if (event.type === 'friend.changed') {
+          for (const handler of friendChangedHandlers.current) handler();
         }
       };
       ws.onclose = () => {
@@ -96,7 +101,14 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  return <SocketCtx.Provider value={{ connected, subscribe, unsubscribe, onMessageCreated, onCommunityDeleted }}>{children}</SocketCtx.Provider>;
+  const onFriendChanged = useCallback((handler: FriendChangedHandler) => {
+    friendChangedHandlers.current.add(handler);
+    return () => {
+      friendChangedHandlers.current.delete(handler);
+    };
+  }, []);
+
+  return <SocketCtx.Provider value={{ connected, subscribe, unsubscribe, onMessageCreated, onCommunityDeleted, onFriendChanged }}>{children}</SocketCtx.Provider>;
 }
 
 export function useSocket(): SocketApi {

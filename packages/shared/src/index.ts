@@ -105,6 +105,37 @@ export interface DmSummary {
   otherUser: UserSummary;
 }
 
+// --- Friends ---
+
+/** A pending friend request, as seen by one side of it. */
+export interface FriendRequest {
+  /** The friendship row id — used to accept/decline/cancel. */
+  id: Id;
+  /** The other person (who you'd be friends with). */
+  user: UserSummary;
+  /** 'incoming' = they asked you; 'outgoing' = you asked them. */
+  direction: 'incoming' | 'outgoing';
+  createdAt: UnixMillis;
+}
+
+/** Everything the home screen needs about your friendships. */
+export interface FriendsData {
+  /** Accepted friends. */
+  friends: UserSummary[];
+  /** Pending requests others sent to you (you can accept/decline). */
+  incoming: FriendRequest[];
+  /** Pending requests you sent (you can cancel). */
+  outgoing: FriendRequest[];
+}
+
+/** Your relationship to one other user, for deciding what action to offer. */
+export type FriendRelation = 'self' | 'friend' | 'incoming' | 'outgoing' | 'none';
+
+/** Body of POST /api/friends/requests — befriend someone by username. */
+export interface SendFriendRequest {
+  username: string;
+}
+
 /** Body of POST /api/dms — open (or reuse) a DM with this user. */
 export interface OpenDmRequest {
   userId: Id;
@@ -116,7 +147,8 @@ export type ServerEvent =
   | { type: 'message.created'; message: Message }
   | { type: 'message.edited'; message: Message }
   | { type: 'presence'; userId: Id; status: PresenceStatus }
-  | { type: 'community.deleted'; communityId: Id };
+  | { type: 'community.deleted'; communityId: Id }
+  | { type: 'friend.changed' };
 
 export type ClientEvent =
   | { type: 'subscribe'; conversationId: Id }
