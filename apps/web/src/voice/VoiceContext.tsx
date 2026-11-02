@@ -23,6 +23,10 @@ export interface VoiceMember {
   name: string;
   speaking: boolean;
   muted: boolean;
+  /** Has their audio off (deafened). Synced across clients via a participant attribute. */
+  deafened: boolean;
+  /** Currently sharing their screen. */
+  streaming: boolean;
 }
 
 /** A published video track (screen share or camera) to attach to a <video>. */
@@ -30,6 +34,8 @@ export interface VideoShare {
   identity: string;
   name: string;
   track: Track;
+  /** Screens only: whether this share also carries an audio track we can mute. */
+  hasAudio?: boolean;
 }
 
 interface VoiceState {
@@ -40,6 +46,8 @@ interface VoiceState {
   members: VoiceMember[];
   screens: VideoShare[];
   cameras: VideoShare[];
+  /** Per-screen-share audio mute, keyed by the sharer's identity. */
+  screenAudioMutes: Record<string, boolean>;
   muted: boolean;
   deafened: boolean;
   screenSharing: boolean;
@@ -51,6 +59,7 @@ interface VoiceState {
   leave: () => Promise<void>;
   toggleMute: () => Promise<void>;
   toggleDeafen: () => Promise<void>;
+  toggleScreenAudio: (identity: string) => void;
   toggleScreen: () => Promise<void>;
   toggleCamera: () => Promise<void>;
   setMicDevice: (id: string) => Promise<void>;
@@ -69,6 +78,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
   const [members, setMembers] = useState<VoiceMember[]>([]);
   const [screens, setScreens] = useState<VideoShare[]>([]);
   const [cameras, setCameras] = useState<VideoShare[]>([]);
+  const [screenAudioMutes, setScreenAudioMutes] = useState<Record<string, boolean>>({});
   const [muted, setMuted] = useState(false);
   const [deafened, setDeafened] = useState(false);
   const [screenSharing, setScreenSharing] = useState(false);
@@ -80,6 +90,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
   // Read inside LiveKit event handlers (which close over the first render).
   const deafenedRef = useRef(false);
   const muteBeforeDeafenRef = useRef(false);
+  const screenAudioMutesRef = useRef<Record<string, boolean>>({});
 
   useEffect(() => () => void roomRef.current?.disconnect(), []);
 
@@ -90,6 +101,8 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     setMembers([]);
     setScreens([]);
     setCameras([]);
+    setScreenAudioMutes({});
+    screenAudioMutesRef.current = {};
     setMuted(false);
     setDeafened(false);
     deafenedRef.current = false;
@@ -98,25 +111,44 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     setJoinedAt(null);
   }
 
-  /** Mute/unmute every remote audio element — this is what "deafen" does. */
-  function applyDeafen(on: boolean) {
-    audioRef.current?.querySelectorAll('audio').forEach((el) => {
-      (el as HTMLAudioElement).muted = on;
+  /**
+   * Recompute the muted state of every remote audio element. An element is
+   * silenced if we're deafened, or if it's a screen-share's audio and we've
+   * muted that sharer. Tagging happens in TrackSubscribed (data-* attributes).
+   */
+  function applyAudioMuting() {
+    audioRef.current?.querySelectorAll('audio').forEach((node) => {
+      const el = node as HTMLAudioElement;
+      const isScreenAudio = el.dataset.screenaudio === '1';
+      const id = el.dataset.identity ?? '';
+      el.muted = deafenedRef.current || (isScreenAudio && !!screenAudioMutesRef.current[id]);
     });
+  }
+
+  /** Mute/unmute one participant's screen-share audio (leaves their mic alone). */
+  function toggleScreenAudio(identity: string) {
+    const next = { ...screenAudioMutesRef.current, [identity]: !screenAudioMutesRef.current[identity] };
+    screenAudioMutesRef.current = next;
+    setScreenAudioMutes(next);
+    applyAudioMuting();
   }
 
   function wire(room: Room): () => void {
     const refresh = () => {
       const all = [room.localParticipant, ...room.remoteParticipants.values()];
-      setMembers(all.map((p) => ({ identity: p.identity, name: p.name || p.identity, speaking: p.isSpeaking, muted: !p.isMicrophoneEnabled })));
+      const localId = room.localParticipant.identity;
 
       const screenShares: VideoShare[] = [];
       const cameraShares: VideoShare[] = [];
+      const streamingIds = new Set<string>();
       for (const p of all) {
-        for (const pub of p.trackPublications.values() as IterableIterator<TrackPublication>) {
+        const pubs = [...(p.trackPublications.values() as IterableIterator<TrackPublication>)];
+        const hasScreenAudio = pubs.some((pub) => pub.source === Track.Source.ScreenShareAudio && pub.track);
+        for (const pub of pubs) {
           if (pub.kind !== Track.Kind.Video || !pub.track) continue;
           if (pub.source === Track.Source.ScreenShare) {
-            screenShares.push({ identity: p.identity, name: p.name || p.identity, track: pub.track });
+            screenShares.push({ identity: p.identity, name: p.name || p.identity, track: pub.track, hasAudio: hasScreenAudio });
+            streamingIds.add(p.identity);
           } else if (pub.source === Track.Source.Camera) {
             cameraShares.push({ identity: p.identity, name: p.name || p.identity, track: pub.track });
           }
@@ -124,6 +156,19 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
       }
       setScreens(screenShares);
       setCameras(cameraShares);
+
+      // Deafen is a client-side notion, so each client advertises it as an
+      // attribute; we read our own from local state and others' from theirs.
+      setMembers(
+        all.map((p) => ({
+          identity: p.identity,
+          name: p.name || p.identity,
+          speaking: p.isSpeaking,
+          muted: !p.isMicrophoneEnabled,
+          deafened: p.identity === localId ? deafenedRef.current : p.attributes?.deafened === '1',
+          streaming: streamingIds.has(p.identity),
+        })),
+      );
       setScreenSharing(room.localParticipant.isScreenShareEnabled);
       setCameraOn(room.localParticipant.isCameraEnabled);
     };
@@ -133,13 +178,17 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
       .on(RoomEvent.ActiveSpeakersChanged, refresh)
       .on(RoomEvent.TrackMuted, refresh)
       .on(RoomEvent.TrackUnmuted, refresh)
+      .on(RoomEvent.ParticipantAttributesChanged, refresh)
       .on(RoomEvent.LocalTrackPublished, refresh)
       .on(RoomEvent.LocalTrackUnpublished, refresh)
-      .on(RoomEvent.TrackSubscribed, (track: RemoteTrack) => {
+      .on(RoomEvent.TrackSubscribed, (track: RemoteTrack, _pub, participant) => {
         if (track.kind === Track.Kind.Audio) {
           const el = track.attach();
-          el.muted = deafenedRef.current; // stay silent if we're deafened
+          // Tag it so applyAudioMuting can target screen-share audio per person.
+          el.dataset.identity = participant.identity;
+          if (track.source === Track.Source.ScreenShareAudio) el.dataset.screenaudio = '1';
           audioRef.current?.appendChild(el);
+          applyAudioMuting();
         }
         refresh();
       })
@@ -226,7 +275,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     // also un-deafens — matching Discord.
     if (!next && deafened) {
       deafenedRef.current = false;
-      applyDeafen(false);
+      applyAudioMuting();
       setDeafened(false);
     }
   }
@@ -236,8 +285,10 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     if (!room) return;
     const next = !deafened;
     deafenedRef.current = next;
-    applyDeafen(next);
+    applyAudioMuting();
     setDeafened(next);
+    // Tell other clients so they can show our deafened status in the list.
+    void room.localParticipant.setAttributes({ deafened: next ? '1' : '0' }).catch(() => {});
     // Deafen also mutes your mic (Discord behaviour); un-deafen restores the mic
     // to whatever it was before you deafened.
     if (next) {
@@ -297,7 +348,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
 
   return (
     <VoiceCtx.Provider
-      value={{ channelId, channelName, status, error, members, screens, cameras, muted, deafened, screenSharing, cameraOn, joinedAt, micDeviceId, speakerDeviceId, join, leave, toggleMute, toggleDeafen, toggleScreen, toggleCamera, setMicDevice, setSpeakerDevice }}
+      value={{ channelId, channelName, status, error, members, screens, cameras, screenAudioMutes, muted, deafened, screenSharing, cameraOn, joinedAt, micDeviceId, speakerDeviceId, join, leave, toggleMute, toggleDeafen, toggleScreenAudio, toggleScreen, toggleCamera, setMicDevice, setSpeakerDevice }}
     >
       {children}
       <div ref={audioRef} style={{ display: 'none' }} />
