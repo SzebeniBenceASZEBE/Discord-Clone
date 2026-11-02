@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { ExternalE2EEKeyProvider, Room, RoomEvent, Track } from 'livekit-client';
-import type { RemoteTrack, RoomOptions, TrackPublication } from 'livekit-client';
+import { ExternalE2EEKeyProvider, Room, RoomEvent, ScreenSharePresets, Track } from 'livekit-client';
+import type { RemoteTrack, RoomOptions, ScreenShareCaptureOptions, TrackPublication, TrackPublishOptions } from 'livekit-client';
 import type { Channel, VoiceTokenResponse } from '@dc/shared';
 import { api } from '../api.ts';
 
@@ -11,6 +11,31 @@ function e2eeSupported(): boolean {
   const w = window as unknown as { RTCRtpScriptTransform?: unknown };
   return typeof w.RTCRtpScriptTransform !== 'undefined' || (typeof RTCRtpSender !== 'undefined' && 'createEncodedStreams' in RTCRtpSender.prototype);
 }
+
+/**
+ * Screen-share quality. LiveKit's default is 1080p at only 15 fps / 2.5 Mbps, so
+ * we ask for 1080p60 instead. Capture and encoding are separate settings, and
+ * both must allow 60 fps or the lower one wins.
+ *
+ * 'motion' tells the encoder to favour smoothness (games, video).
+ */
+const SCREEN_CAPTURE: ScreenShareCaptureOptions = {
+  audio: true,
+  resolution: { width: 1920, height: 1080, frameRate: 60 },
+  contentHint: 'motion',
+};
+
+/**
+ * The top layer is the full 1080p60. The extra 720p30 layer is simulcast: the
+ * sharer uploads both, and the server sends each viewer the one that fits their
+ * connection and tile size (small grid tile: 720p; focused share: 1080p60).
+ * Nobody watching the small layer means it pauses, so it costs little.
+ */
+const SCREEN_PUBLISH: TrackPublishOptions = {
+  screenShareEncoding: { maxBitrate: 8_000_000, maxFramerate: 60 },
+  simulcast: true,
+  screenShareSimulcastLayers: [ScreenSharePresets.h720fps30],
+};
 
 /**
  * Holds the ONE active voice connection for the session, above channel
@@ -307,7 +332,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     if (!room) return;
     const next = !screenSharing;
     try {
-      await room.localParticipant.setScreenShareEnabled(next, { audio: true });
+      await room.localParticipant.setScreenShareEnabled(next, SCREEN_CAPTURE, SCREEN_PUBLISH);
       setScreenSharing(next);
     } catch {
       // User cancelled the screen picker — sync to the real state.
