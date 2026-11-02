@@ -11,6 +11,7 @@ import type { ClientEvent, Message, ServerEvent } from '@dc/shared';
 type MessageHandler = (message: Message) => void;
 type CommunityDeletedHandler = (communityId: string) => void;
 type FriendChangedHandler = () => void;
+type PasswordResetRequestedHandler = () => void;
 
 interface SocketApi {
   connected: boolean;
@@ -19,6 +20,7 @@ interface SocketApi {
   onMessageCreated: (handler: MessageHandler) => () => void;
   onCommunityDeleted: (handler: CommunityDeletedHandler) => () => void;
   onFriendChanged: (handler: FriendChangedHandler) => () => void;
+  onPasswordResetRequested: (handler: PasswordResetRequestedHandler) => () => void;
 }
 
 const SocketCtx = createContext<SocketApi | null>(null);
@@ -29,6 +31,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
   const handlers = useRef<Set<MessageHandler>>(new Set());
   const communityDeletedHandlers = useRef<Set<CommunityDeletedHandler>>(new Set());
   const friendChangedHandlers = useRef<Set<FriendChangedHandler>>(new Set());
+  const passwordResetHandlers = useRef<Set<PasswordResetRequestedHandler>>(new Set());
   const [connected, setConnected] = useState(false);
 
   useEffect(() => {
@@ -55,6 +58,8 @@ export function SocketProvider({ children }: { children: ReactNode }) {
           for (const handler of communityDeletedHandlers.current) handler(event.communityId);
         } else if (event.type === 'friend.changed') {
           for (const handler of friendChangedHandlers.current) handler();
+        } else if (event.type === 'password-reset.requested') {
+          for (const handler of passwordResetHandlers.current) handler();
         }
       };
       ws.onclose = () => {
@@ -108,7 +113,14 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  return <SocketCtx.Provider value={{ connected, subscribe, unsubscribe, onMessageCreated, onCommunityDeleted, onFriendChanged }}>{children}</SocketCtx.Provider>;
+  const onPasswordResetRequested = useCallback((handler: PasswordResetRequestedHandler) => {
+    passwordResetHandlers.current.add(handler);
+    return () => {
+      passwordResetHandlers.current.delete(handler);
+    };
+  }, []);
+
+  return <SocketCtx.Provider value={{ connected, subscribe, unsubscribe, onMessageCreated, onCommunityDeleted, onFriendChanged, onPasswordResetRequested }}>{children}</SocketCtx.Provider>;
 }
 
 export function useSocket(): SocketApi {

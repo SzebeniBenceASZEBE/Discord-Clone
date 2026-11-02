@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import type { AuthedUser, RegisterRequest } from '@dc/shared';
+import type { AuthedUser, RegisterRequest, ResetPasswordRequest } from '@dc/shared';
 import { api } from '../api.ts';
 
 /**
@@ -13,6 +13,7 @@ interface AuthState {
   loading: boolean;
   login: (username: string, password: string) => Promise<void>;
   register: (req: RegisterRequest) => Promise<void>;
+  resetPassword: (req: ResetPasswordRequest) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -36,12 +37,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const register = async (req: RegisterRequest) => {
     setUser(await api.post<AuthedUser>('/api/auth/register', req));
   };
+  const resetPassword = async (req: ResetPasswordRequest) => {
+    setUser(await api.post<AuthedUser>('/api/auth/reset', req));
+  };
   const logout = async () => {
     await api.post('/api/auth/logout');
     setUser(null);
   };
 
-  return <AuthCtx.Provider value={{ user, loading, login, register, logout }}>{children}</AuthCtx.Provider>;
+  return <AuthCtx.Provider value={{ user, loading, login, register, resetPassword, logout }}>{children}</AuthCtx.Provider>;
 }
 
 export function useAuth(): AuthState {

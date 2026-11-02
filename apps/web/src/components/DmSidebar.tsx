@@ -74,6 +74,9 @@ export function DmSidebar({
   onAccept,
   onDecline,
   onCancel,
+  isAdmin,
+  resetBadge,
+  onOpenAdmin,
 }: {
   dms: DmSummary[];
   friends: UserSummary[];
@@ -86,6 +89,10 @@ export function DmSidebar({
   onAccept: (id: string) => void;
   onDecline: (id: string) => void;
   onCancel: (id: string) => void;
+  /** Admin-only: opens the password-reset panel, with a badge of pending ones. */
+  isAdmin: boolean;
+  resetBadge: number;
+  onOpenAdmin: () => void;
 }) {
   // Friends you don't already have a DM open with — tap to start one.
   const inDm = new Set(dms.map((d) => d.otherUser.id));
@@ -96,14 +103,28 @@ export function DmSidebar({
     <aside style={{ width: layout.sidebarWidth, flex: 'none', background: theme.sidebar, display: 'flex', flexDirection: 'column' }}>
       <div style={{ height: layout.topBarHeight, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 12px', fontWeight: 600, boxShadow: '0 1px 0 rgba(0,0,0,.2)' }}>
         <span>Direct Messages</span>
-        <button
-          title="Add friend"
-          onClick={onAddFriend}
-          style={{ display: 'flex', alignItems: 'center', gap: 4, background: theme.green, color: '#fff', border: 'none', borderRadius: 4, padding: '4px 8px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" /></svg>
-          Add
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {isAdmin && (
+            <button
+              title="Password resets (admin)"
+              onClick={onOpenAdmin}
+              style={{ position: 'relative', display: 'flex', alignItems: 'center', background: 'none', color: theme.textMuted, border: 'none', borderRadius: 4, padding: 4, cursor: 'pointer' }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6l7-3Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" /></svg>
+              {resetBadge > 0 && (
+                <span style={{ position: 'absolute', top: -2, right: -2, minWidth: 15, height: 15, padding: '0 3px', borderRadius: 8, background: theme.red, color: '#fff', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{resetBadge}</span>
+              )}
+            </button>
+          )}
+          <button
+            title="Add friend"
+            onClick={onAddFriend}
+            style={{ display: 'flex', alignItems: 'center', gap: 4, background: theme.green, color: '#fff', border: 'none', borderRadius: 4, padding: '4px 8px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" /></svg>
+            Add
+          </button>
+        </div>
       </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: 8 }} className="scrollthin">
         {dms.map((dm) => (

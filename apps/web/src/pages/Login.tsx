@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
-import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext.tsx';
 import { ApiError } from '../api.ts';
 import { AuthShell } from '../components/AuthShell.tsx';
@@ -61,6 +61,9 @@ export function Login() {
         <button type="submit" style={{ ...buttonStyle, opacity: busy ? 0.7 : 1 }} disabled={busy}>
           {busy ? 'Logging in…' : 'Log in'}
         </button>
+        <div style={{ textAlign: 'center', marginTop: 14 }}>
+          <Link to="/forgot" style={{ color: '#949ba4', fontSize: 13 }}>Forgot your password?</Link>
+        </div>
       </form>
     </AuthShell>
   );

@@ -182,5 +182,20 @@ function bootstrap(db: DatabaseSync): void {
       ON friendships(MIN(requester_id, addressee_id), MAX(requester_id, addressee_id));
     CREATE INDEX IF NOT EXISTS idx_friendships_addressee ON friendships(addressee_id);
     CREATE INDEX IF NOT EXISTS idx_friendships_requester ON friendships(requester_id);
+
+    -- Admin-mediated password resets. A user asks (status 'requested'); the
+    -- admin hands out a one-time code (status 'issued', only its hash stored);
+    -- using the code sets a new password and the row is deleted. At most one
+    -- live row per user. No email exists in this app, so the admin is the
+    -- recovery channel.
+    CREATE TABLE IF NOT EXISTS password_resets (
+      id            TEXT PRIMARY KEY,
+      user_id       TEXT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+      status        TEXT NOT NULL,   -- 'requested' | 'issued'
+      code_hash     TEXT,            -- SHA-256 of the one-time code (when issued)
+      requested_at  INTEGER,
+      issued_at     INTEGER,
+      expires_at    INTEGER
+    );
   `);
 }

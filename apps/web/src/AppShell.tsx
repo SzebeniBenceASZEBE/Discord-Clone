@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import type { Channel, Community, CreatedCommunity, CreatedInvite, CreatedServerInvite, DmSummary, FriendRelation, FriendsData, UserSummary } from '@dc/shared';
+import type { Channel, Community, CreatedCommunity, CreatedInvite, CreatedServerInvite, DmSummary, FriendRelation, FriendsData, IssuedResetCode, PasswordResetItem, UserSummary } from '@dc/shared';
 import { theme } from './theme.ts';
 import { api } from './api.ts';
 import { useAuth } from './auth/AuthContext.tsx';
@@ -16,6 +16,7 @@ import { VoiceStage } from './voice/VoiceStage.tsx';
 import { CreateServerModal } from './components/CreateServerModal.tsx';
 import { DeleteServerModal } from './components/DeleteServerModal.tsx';
 import { AddFriendModal } from './components/AddFriendModal.tsx';
+import { AdminPanel } from './components/AdminPanel.tsx';
 
 /**
  * The authenticated app. Owns navigation: home (DMs) vs a selected server, and
@@ -28,7 +29,7 @@ import { AddFriendModal } from './components/AddFriendModal.tsx';
  */
 export function AppShell() {
   const { user, logout } = useAuth();
-  const { onCommunityDeleted, onFriendChanged } = useSocket();
+  const { onCommunityDeleted, onFriendChanged, onPasswordResetRequested } = useSocket();
   const isMobile = useIsMobile();
 
   // Servers + channels.
@@ -44,6 +45,11 @@ export function AppShell() {
   const [friends, setFriends] = useState<FriendsData>({ friends: [], incoming: [], outgoing: [] });
   const [selectedDm, setSelectedDm] = useState<DmSummary | null>(null);
   const [showAddFriend, setShowAddFriend] = useState(false);
+
+  // Admin: password-reset requests (only loaded/used when you're the admin).
+  const [resets, setResets] = useState<PasswordResetItem[]>([]);
+  const [showAdmin, setShowAdmin] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
 
   // Invites (account invite or server invite — same banner).
   const [invite, setInvite] = useState<{ url: string; label: string } | null>(null);
@@ -172,6 +178,36 @@ export function AppShell() {
   // Live: refetch our friends whenever anything changes on either side.
   useEffect(() => onFriendChanged(() => void loadFriends()), [onFriendChanged]);
 
+  // --- Admin: password resets (admin only). ---
+  const isAdmin = user?.isAdmin === true;
+  const loadResets = () => (isAdmin ? api.get<PasswordResetItem[]>('/api/admin/password-resets').then(setResets) : Promise.resolve());
+
+  async function issueResetCode(username: string): Promise<IssuedResetCode> {
+    const out = await api.post<IssuedResetCode>('/api/admin/password-resets/issue', { username });
+    await loadResets();
+    return out;
+  }
+  async function dismissReset(id: string) {
+    await api.del(`/api/admin/password-resets/${id}`);
+    await loadResets();
+  }
+
+  useEffect(() => {
+    if (isAdmin) void loadResets();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin]);
+
+  // Live: a new reset request pops a toast and refreshes the admin list.
+  useEffect(
+    () =>
+      onPasswordResetRequested(() => {
+        void loadResets();
+        setToast('Someone requested a password reset');
+        setTimeout(() => setToast(null), 6000);
+      }),
+    [onPasswordResetRequested],
+  );
+
   async function makeInvite() {
     setInviteBusy(true);
     setCopied(false);
@@ -256,6 +292,9 @@ export function AppShell() {
       onAccept={acceptRequest}
       onDecline={removeRequest}
       onCancel={removeRequest}
+      isAdmin={isAdmin}
+      resetBadge={resets.length}
+      onOpenAdmin={() => setShowAdmin(true)}
     />
   );
 
@@ -339,6 +378,8 @@ export function AppShell() {
         {showCreate && <CreateServerModal onClose={() => setShowCreate(false)} onCreate={createServer} />}
         {deleteTarget && <DeleteServerModal community={deleteTarget} onClose={() => setDeleteTarget(null)} onDelete={() => deleteServer(deleteTarget)} />}
         {showAddFriend && <AddFriendModal onClose={() => setShowAddFriend(false)} onSend={sendFriendRequest} />}
+        {showAdmin && <AdminPanel resets={resets} onIssue={issueResetCode} onDismiss={dismissReset} onClose={() => setShowAdmin(false)} />}
+        {toast && <Toast message={toast} onClick={() => { setToast(null); setShowAdmin(true); }} />}
       </div>
     );
   }
@@ -353,6 +394,21 @@ export function AppShell() {
       {showCreate && <CreateServerModal onClose={() => setShowCreate(false)} onCreate={createServer} />}
       {deleteTarget && <DeleteServerModal community={deleteTarget} onClose={() => setDeleteTarget(null)} onDelete={() => deleteServer(deleteTarget)} />}
       {showAddFriend && <AddFriendModal onClose={() => setShowAddFriend(false)} onSend={sendFriendRequest} />}
+      {showAdmin && <AdminPanel resets={resets} onIssue={issueResetCode} onDismiss={dismissReset} onClose={() => setShowAdmin(false)} />}
+      {toast && <Toast message={toast} onClick={() => { setToast(null); setShowAdmin(true); }} />}
+    </div>
+  );
+}
+
+/** A small transient banner (used for the live "reset requested" nudge). */
+function Toast({ message, onClick }: { message: string; onClick: () => void }) {
+  return (
+    <div
+      onClick={onClick}
+      style={{ position: 'fixed', top: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 60, background: theme.blurple, color: '#fff', borderRadius: 8, padding: '10px 16px', fontSize: 14, fontWeight: 500, boxShadow: '0 8px 24px rgba(0,0,0,.4)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10 }}
+    >
+      {message}
+      <span style={{ fontSize: 12, opacity: 0.85, textDecoration: 'underline' }}>Open</span>
     </div>
   );
 }

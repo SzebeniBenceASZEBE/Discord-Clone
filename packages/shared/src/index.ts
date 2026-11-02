@@ -136,6 +136,40 @@ export interface SendFriendRequest {
   username: string;
 }
 
+// --- Password reset (admin-mediated, code-based) ---
+
+/** A row in the admin's password-reset list. */
+export interface PasswordResetItem {
+  id: Id;
+  username: string;
+  displayName: string;
+  /** 'requested' = user asked; 'issued' = admin handed out a code. */
+  status: 'requested' | 'issued';
+  requestedAt?: UnixMillis;
+  issuedAt?: UnixMillis;
+  /** When the issued code stops working. */
+  expiresAt?: UnixMillis;
+}
+
+/** Body of POST /api/auth/forgot — ask the admin to reset your password. */
+export interface ForgotPasswordRequest {
+  username: string;
+}
+
+/** Body of POST /api/auth/reset — set a new password using an admin's code. */
+export interface ResetPasswordRequest {
+  username: string;
+  code: string;
+  password: string;
+}
+
+/** What the admin sees once after generating a code (to pass on out-of-band). */
+export interface IssuedResetCode {
+  username: string;
+  code: string;
+  expiresAt: UnixMillis;
+}
+
 /** Body of POST /api/dms — open (or reuse) a DM with this user. */
 export interface OpenDmRequest {
   userId: Id;
@@ -148,7 +182,8 @@ export type ServerEvent =
   | { type: 'message.edited'; message: Message }
   | { type: 'presence'; userId: Id; status: PresenceStatus }
   | { type: 'community.deleted'; communityId: Id }
-  | { type: 'friend.changed' };
+  | { type: 'friend.changed' }
+  | { type: 'password-reset.requested' };
 
 export type ClientEvent =
   | { type: 'subscribe'; conversationId: Id }

@@ -5,6 +5,8 @@ import { SocketProvider } from './socket/SocketContext.tsx';
 import { VoiceProvider } from './voice/VoiceContext.tsx';
 import { Login } from './pages/Login.tsx';
 import { Register } from './pages/Register.tsx';
+import { ForgotPassword } from './pages/ForgotPassword.tsx';
+import { ResetPassword } from './pages/ResetPassword.tsx';
 import { JoinServer } from './pages/JoinServer.tsx';
 import { AppShell } from './AppShell.tsx';
 
@@ -34,6 +36,8 @@ export function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/forgot" element={<ForgotPassword />} />
+          <Route path="/reset" element={<ResetPassword />} />
           <Route path="/invite/:token" element={<Register />} />
           <Route path="/join/:token" element={<JoinServer />} />
           <Route path="/*" element={<Protected />} />

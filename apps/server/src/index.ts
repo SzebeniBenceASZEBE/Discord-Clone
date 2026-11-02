@@ -57,7 +57,7 @@ app.addHook('onRequest', csrfGuard);
 app.get('/api/health', async () => ({ ok: true, time: Date.now() }));
 
 // Auth: /api/auth/login, /logout, /me.
-await app.register(authRoutes({ db, cookieSecure, appUrl: APP_URL }));
+await app.register(authRoutes({ db, cookieSecure, appUrl: APP_URL, hub }));
 
 // Communities + channels + server invites: /api/communities…
 await app.register(communityRoutes({ db, appUrl: APP_URL, hub, dataDir: DATA_DIR }));
