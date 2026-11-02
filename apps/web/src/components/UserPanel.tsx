@@ -3,11 +3,20 @@ import { useAuth } from '../auth/AuthContext.tsx';
 import { useSocket } from '../socket/SocketContext.tsx';
 import { theme } from '../theme.ts';
 import { Avatar } from './Avatar.tsx';
+import { useVoice } from '../voice/VoiceContext.tsx';
 import { VoiceSettingsModal } from '../voice/VoiceSettingsModal.tsx';
 
-function IconButton({ title, active, onClick, children }: { title: string; active?: boolean; onClick: () => void; children: React.ReactNode }) {
+function IconButton({ title, active, disabled, onClick, children }: { title: string; active?: boolean; disabled?: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
-    <button type="button" title={title} aria-label={title} onClick={onClick} style={{ background: 'none', border: 'none', color: active ? '#f23f43' : theme.textMuted, cursor: 'pointer', padding: 6, display: 'flex', borderRadius: 4 }}>
+    <button
+      type="button"
+      title={title}
+      aria-label={title}
+      aria-pressed={active}
+      disabled={disabled}
+      onClick={onClick}
+      style={{ background: 'none', border: 'none', color: active ? '#f23f43' : theme.textMuted, cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.4 : 1, padding: 6, display: 'flex', borderRadius: 4 }}
+    >
       {children}
     </button>
   );
@@ -46,27 +55,28 @@ function GearIcon() {
 
 /**
  * Bottom-left panel (Discord-style): your avatar + status dot + display name,
- * and mic/deafen/settings controls. The controls are visual placeholders until
- * the voice and settings phases — they toggle their own look but do nothing yet.
+ * and mic/deafen/settings controls. Mic and deafen reflect — and control — the
+ * real voice connection; they're inactive while you're not in a call.
  */
 export function UserPanel() {
   const { user } = useAuth();
   const { connected } = useSocket();
-  const [muted, setMuted] = useState(false);
-  const [deafened, setDeafened] = useState(false);
+  const voice = useVoice();
   const [showSettings, setShowSettings] = useState(false);
 
   if (!user) return null;
+
+  const inCall = !!voice.channelId;
 
   return (
     <div style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 8, padding: '8px', background: theme.rail }}>
       <Avatar name={user.displayName} id={user.id} size={32} status={connected ? 'online' : 'offline'} ringColor={theme.rail} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 14, fontWeight: 600, color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.displayName}</div>
-        <div style={{ fontSize: 11, color: theme.textMuted }}>{connected ? 'Online' : 'Connecting…'}</div>
+        <div style={{ fontSize: 11, color: inCall ? theme.green : theme.textMuted }}>{inCall ? 'Voice Connected' : connected ? 'Online' : 'Connecting…'}</div>
       </div>
-      <IconButton title={muted ? 'Unmute' : 'Mute'} active={muted} onClick={() => setMuted((m) => !m)}><MicIcon off={muted} /></IconButton>
-      <IconButton title={deafened ? 'Undeafen' : 'Deafen'} active={deafened} onClick={() => setDeafened((d) => !d)}><HeadphonesIcon off={deafened} /></IconButton>
+      <IconButton title={voice.muted ? 'Unmute' : 'Mute'} active={voice.muted} disabled={!inCall} onClick={() => voice.toggleMute()}><MicIcon off={voice.muted} /></IconButton>
+      <IconButton title={voice.deafened ? 'Undeafen' : 'Deafen'} active={voice.deafened} disabled={!inCall} onClick={() => voice.toggleDeafen()}><HeadphonesIcon off={voice.deafened} /></IconButton>
       <IconButton title="Voice settings" onClick={() => setShowSettings(true)}><GearIcon /></IconButton>
       {showSettings && <VoiceSettingsModal onClose={() => setShowSettings(false)} />}
     </div>

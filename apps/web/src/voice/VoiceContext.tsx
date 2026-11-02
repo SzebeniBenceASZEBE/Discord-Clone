@@ -25,10 +25,11 @@ export interface VoiceMember {
   muted: boolean;
 }
 
-export interface ScreenShare {
+/** A published video track (screen share or camera) to attach to a <video>. */
+export interface VideoShare {
   identity: string;
   name: string;
-  track: Track; // a screen-share video track to attach to a <video>
+  track: Track;
 }
 
 interface VoiceState {
@@ -37,16 +38,21 @@ interface VoiceState {
   status: 'idle' | 'connecting' | 'connected' | 'error';
   error: string;
   members: VoiceMember[];
-  screens: ScreenShare[];
+  screens: VideoShare[];
+  cameras: VideoShare[];
   muted: boolean;
+  deafened: boolean;
   screenSharing: boolean;
+  cameraOn: boolean;
   joinedAt: number | null;
   micDeviceId: string | undefined;
   speakerDeviceId: string | undefined;
   join: (channel: Channel) => Promise<void>;
   leave: () => Promise<void>;
   toggleMute: () => Promise<void>;
+  toggleDeafen: () => Promise<void>;
   toggleScreen: () => Promise<void>;
+  toggleCamera: () => Promise<void>;
   setMicDevice: (id: string) => Promise<void>;
   setSpeakerDevice: (id: string) => Promise<void>;
 }
@@ -61,12 +67,19 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<VoiceState['status']>('idle');
   const [error, setError] = useState('');
   const [members, setMembers] = useState<VoiceMember[]>([]);
-  const [screens, setScreens] = useState<ScreenShare[]>([]);
+  const [screens, setScreens] = useState<VideoShare[]>([]);
+  const [cameras, setCameras] = useState<VideoShare[]>([]);
   const [muted, setMuted] = useState(false);
+  const [deafened, setDeafened] = useState(false);
   const [screenSharing, setScreenSharing] = useState(false);
+  const [cameraOn, setCameraOn] = useState(false);
   const [joinedAt, setJoinedAt] = useState<number | null>(null);
   const [micDeviceId, setMicDeviceId] = useState<string | undefined>(undefined);
   const [speakerDeviceId, setSpeakerDeviceId] = useState<string | undefined>(undefined);
+
+  // Read inside LiveKit event handlers (which close over the first render).
+  const deafenedRef = useRef(false);
+  const muteBeforeDeafenRef = useRef(false);
 
   useEffect(() => () => void roomRef.current?.disconnect(), []);
 
@@ -76,9 +89,20 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     setStatus('idle');
     setMembers([]);
     setScreens([]);
+    setCameras([]);
     setMuted(false);
+    setDeafened(false);
+    deafenedRef.current = false;
     setScreenSharing(false);
+    setCameraOn(false);
     setJoinedAt(null);
+  }
+
+  /** Mute/unmute every remote audio element — this is what "deafen" does. */
+  function applyDeafen(on: boolean) {
+    audioRef.current?.querySelectorAll('audio').forEach((el) => {
+      (el as HTMLAudioElement).muted = on;
+    });
   }
 
   function wire(room: Room): () => void {
@@ -86,16 +110,22 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
       const all = [room.localParticipant, ...room.remoteParticipants.values()];
       setMembers(all.map((p) => ({ identity: p.identity, name: p.name || p.identity, speaking: p.isSpeaking, muted: !p.isMicrophoneEnabled })));
 
-      const shares: ScreenShare[] = [];
+      const screenShares: VideoShare[] = [];
+      const cameraShares: VideoShare[] = [];
       for (const p of all) {
         for (const pub of p.trackPublications.values() as IterableIterator<TrackPublication>) {
-          if (pub.source === Track.Source.ScreenShare && pub.kind === Track.Kind.Video && pub.track) {
-            shares.push({ identity: p.identity, name: p.name || p.identity, track: pub.track });
+          if (pub.kind !== Track.Kind.Video || !pub.track) continue;
+          if (pub.source === Track.Source.ScreenShare) {
+            screenShares.push({ identity: p.identity, name: p.name || p.identity, track: pub.track });
+          } else if (pub.source === Track.Source.Camera) {
+            cameraShares.push({ identity: p.identity, name: p.name || p.identity, track: pub.track });
           }
         }
       }
-      setScreens(shares);
+      setScreens(screenShares);
+      setCameras(cameraShares);
       setScreenSharing(room.localParticipant.isScreenShareEnabled);
+      setCameraOn(room.localParticipant.isCameraEnabled);
     };
     room
       .on(RoomEvent.ParticipantConnected, refresh)
@@ -106,7 +136,11 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
       .on(RoomEvent.LocalTrackPublished, refresh)
       .on(RoomEvent.LocalTrackUnpublished, refresh)
       .on(RoomEvent.TrackSubscribed, (track: RemoteTrack) => {
-        if (track.kind === Track.Kind.Audio) audioRef.current?.appendChild(track.attach());
+        if (track.kind === Track.Kind.Audio) {
+          const el = track.attach();
+          el.muted = deafenedRef.current; // stay silent if we're deafened
+          audioRef.current?.appendChild(el);
+        }
         refresh();
       })
       .on(RoomEvent.TrackUnsubscribed, (track: RemoteTrack) => {
@@ -169,6 +203,8 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
       }
       setStatus('connected');
       setMuted(false);
+      setDeafened(false);
+      deafenedRef.current = false;
       setJoinedAt(Date.now());
       refresh();
     } catch (err) {
@@ -186,6 +222,33 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     const next = !muted;
     await room.localParticipant.setMicrophoneEnabled(!next);
     setMuted(next);
+    // Un-muting while deafened makes no sense (you still couldn't hear), so it
+    // also un-deafens — matching Discord.
+    if (!next && deafened) {
+      deafenedRef.current = false;
+      applyDeafen(false);
+      setDeafened(false);
+    }
+  }
+
+  async function toggleDeafen() {
+    const room = roomRef.current;
+    if (!room) return;
+    const next = !deafened;
+    deafenedRef.current = next;
+    applyDeafen(next);
+    setDeafened(next);
+    // Deafen also mutes your mic (Discord behaviour); un-deafen restores the mic
+    // to whatever it was before you deafened.
+    if (next) {
+      muteBeforeDeafenRef.current = muted;
+      if (!muted) await room.localParticipant.setMicrophoneEnabled(false);
+      setMuted(true);
+    } else {
+      const restore = muteBeforeDeafenRef.current;
+      await room.localParticipant.setMicrophoneEnabled(!restore);
+      setMuted(restore);
+    }
   }
 
   async function toggleScreen() {
@@ -198,6 +261,19 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     } catch {
       // User cancelled the screen picker — sync to the real state.
       setScreenSharing(room.localParticipant.isScreenShareEnabled);
+    }
+  }
+
+  async function toggleCamera() {
+    const room = roomRef.current;
+    if (!room) return;
+    const next = !cameraOn;
+    try {
+      await room.localParticipant.setCameraEnabled(next, { deviceId: undefined });
+      setCameraOn(next);
+    } catch {
+      // Camera unavailable / permission denied — sync to the real state.
+      setCameraOn(room.localParticipant.isCameraEnabled);
     }
   }
 
@@ -221,7 +297,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
 
   return (
     <VoiceCtx.Provider
-      value={{ channelId, channelName, status, error, members, screens, muted, screenSharing, joinedAt, micDeviceId, speakerDeviceId, join, leave, toggleMute, toggleScreen, setMicDevice, setSpeakerDevice }}
+      value={{ channelId, channelName, status, error, members, screens, cameras, muted, deafened, screenSharing, cameraOn, joinedAt, micDeviceId, speakerDeviceId, join, leave, toggleMute, toggleDeafen, toggleScreen, toggleCamera, setMicDevice, setSpeakerDevice }}
     >
       {children}
       <div ref={audioRef} style={{ display: 'none' }} />
