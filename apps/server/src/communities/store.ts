@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
-import type { Channel, ChannelKind, Community } from '@dc/shared';
+import type { Channel, ChannelKind, Community, CommunityMember } from '@dc/shared';
+import type { Hub } from '../realtime/hub.ts';
 
 /**
  * Data layer for communities ("servers") and their channels. Pure functions
@@ -67,6 +68,24 @@ export function getCommunity(db: DatabaseSync, communityId: string): Community |
   return db
     .prepare(`SELECT id, name, label, color, owner_id AS ownerId FROM communities WHERE id = ?`)
     .get(communityId) as Community | undefined;
+}
+
+/** Everyone in a community, with live online status (for the member list). */
+export function listMembers(db: DatabaseSync, communityId: string, hub: Hub): CommunityMember[] {
+  const rows = db
+    .prepare(
+      `SELECT u.id, u.username, u.display_name AS displayName, m.role
+       FROM community_members m JOIN users u ON u.id = m.user_id
+       WHERE m.community_id = ? ORDER BY u.display_name`,
+    )
+    .all(communityId) as unknown as { id: string; username: string; displayName: string; role: string }[];
+  return rows.map((r) => ({
+    id: r.id,
+    username: r.username,
+    displayName: r.displayName,
+    role: r.role === 'owner' ? 'owner' : 'member',
+    status: hub.isOnline(r.id) ? 'online' : 'offline',
+  }));
 }
 
 /**

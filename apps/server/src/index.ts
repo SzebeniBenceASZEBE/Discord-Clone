@@ -59,7 +59,7 @@ app.get('/api/health', async () => ({ ok: true, time: Date.now() }));
 await app.register(authRoutes({ db, cookieSecure, appUrl: APP_URL }));
 
 // Communities + channels + server invites: /api/communities…
-await app.register(communityRoutes({ db, appUrl: APP_URL }));
+await app.register(communityRoutes({ db, appUrl: APP_URL, hub }));
 
 // Messages (channels + DMs): /api/conversations/:id/messages
 await app.register(messageRoutes({ db, hub }));

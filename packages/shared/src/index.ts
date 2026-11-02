@@ -88,6 +88,15 @@ export interface UserSummary {
   status: PresenceStatus;
 }
 
+/** A member of a community, for the server member list. */
+export interface CommunityMember {
+  id: Id;
+  username: string;
+  displayName: string;
+  status: PresenceStatus;
+  role: 'owner' | 'member';
+}
+
 /** A DM in the sidebar: the conversation id plus the other person. */
 export interface DmSummary {
   conversationId: Id;

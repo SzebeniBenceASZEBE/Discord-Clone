@@ -8,6 +8,7 @@ import { useIsMobile } from './useIsMobile.ts';
 import { ServerRail } from './components/ServerRail.tsx';
 import { DmSidebar } from './components/DmSidebar.tsx';
 import { ActiveNow } from './components/ActiveNow.tsx';
+import { MemberList } from './components/MemberList.tsx';
 import { ChannelList } from './chat/ChannelList.tsx';
 import { ChatView } from './chat/ChatView.tsx';
 import { VoiceStage } from './voice/VoiceStage.tsx';
@@ -276,7 +277,7 @@ export function AppShell() {
       {serverRail}
       {sidebar}
       {mainPane}
-      {!selectedCommunity && !selectedDm && <ActiveNow />}
+      {selectedCommunity ? <MemberList communityId={selectedCommunity.id} /> : !selectedDm ? <ActiveNow /> : null}
       {showCreate && <CreateServerModal onClose={() => setShowCreate(false)} onCreate={createServer} />}
     </div>
   );

@@ -2,16 +2,18 @@ import type { FastifyInstance } from 'fastify';
 import type { DatabaseSync } from 'node:sqlite';
 import type { CreateCommunityRequest, CreatedCommunity, CreatedServerInvite, ServerInviteInfo } from '@dc/shared';
 import { makeRequireAuth } from '../auth/guard.ts';
-import { createCommunity, getCommunity, isMember, listChannels, listCommunitiesForUser } from './store.ts';
+import type { Hub } from '../realtime/hub.ts';
+import { createCommunity, getCommunity, isMember, listChannels, listCommunitiesForUser, listMembers } from './store.ts';
 import { acceptServerInvite, createServerInvite, validateServerInvite } from './invites.ts';
 
 interface CommunityOptions {
   db: DatabaseSync;
   appUrl: string;
+  hub: Hub;
 }
 
 export function communityRoutes(opts: CommunityOptions) {
-  const { db, appUrl } = opts;
+  const { db, appUrl, hub } = opts;
   const requireAuth = makeRequireAuth(db);
 
   return async function (app: FastifyInstance): Promise<void> {
@@ -37,6 +39,15 @@ export function communityRoutes(opts: CommunityOptions) {
         return reply.code(403).send({ error: 'not a member of this server' });
       }
       return listChannels(db, id);
+    });
+
+    // GET /api/communities/:id/members — the member list (online + offline).
+    app.get('/api/communities/:id/members', { preHandler: requireAuth }, async (req, reply) => {
+      const { id } = req.params as { id: string };
+      if (!isMember(db, id, req.user!.id)) {
+        return reply.code(403).send({ error: 'not a member of this server' });
+      }
+      return listMembers(db, id, hub);
     });
 
     // POST /api/communities/:id/invites — any member can mint a join link.
