@@ -18,6 +18,8 @@ export function Register() {
   const [displayName, setDisplayName] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [show, setShow] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -32,7 +34,10 @@ export function Register() {
   if (user) return <Navigate to="/" replace />;
 
   const usernameOk = USERNAME_RE.test(username);
-  const canSubmit = displayName.trim() !== '' && usernameOk && password.length >= 8 && !busy;
+  // Only compare once they've started the confirm field, so the mismatch hint
+  // doesn't flash while they're still typing the first password.
+  const passwordsMatch = password === confirm;
+  const canSubmit = displayName.trim() !== '' && usernameOk && password.length >= 8 && passwordsMatch && !busy;
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -89,9 +94,20 @@ export function Register() {
         <input id="username" className="auth-input" value={username} onChange={(e) => setUsername(e.target.value.toLowerCase())} autoComplete="username" />
         <div style={{ ...hintStyle, color: username && !usernameOk ? '#f0888c' : '#80848e' }}>3–20 characters: a–z, 0–9, underscore</div>
 
-        <label style={labelStyle} htmlFor="password">Password</label>
-        <input id="password" className="auth-input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" />
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+          <label style={labelStyle} htmlFor="password">Password</label>
+          <button type="button" onClick={() => setShow((s) => !s)} style={{ background: 'none', border: 'none', color: '#949ba4', fontSize: 11, cursor: 'pointer', padding: 0 }}>
+            {show ? 'Hide' : 'Show'}
+          </button>
+        </div>
+        <input id="password" className="auth-input" type={show ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" />
         <div style={{ ...hintStyle, color: password && password.length < 8 ? '#f0888c' : '#80848e' }}>At least 8 characters</div>
+
+        <label style={labelStyle} htmlFor="confirm">Confirm password</label>
+        <input id="confirm" className="auth-input" type={show ? 'text' : 'password'} value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="new-password" />
+        <div style={{ ...hintStyle, color: confirm && !passwordsMatch ? '#f0888c' : '#80848e' }}>
+          {confirm && !passwordsMatch ? "Passwords don't match" : 'Type it again to be sure'}
+        </div>
 
         <button type="submit" style={{ ...buttonStyle, opacity: canSubmit ? 1 : 0.6, cursor: canSubmit ? 'pointer' : 'not-allowed' }} disabled={!canSubmit}>
           {busy ? 'Creating account…' : 'Create account & join'}
