@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { ExternalE2EEKeyProvider, Room, RoomEvent, ScreenSharePresets, Track } from 'livekit-client';
+import { ExternalE2EEKeyProvider, Room, RoomEvent, Track, VideoPreset } from 'livekit-client';
 import type { RemoteTrack, RoomOptions, ScreenShareCaptureOptions, TrackPublication, TrackPublishOptions } from 'livekit-client';
 import type { Channel, VoiceTokenResponse } from '@dc/shared';
 import { api } from '../api.ts';
@@ -14,27 +14,28 @@ function e2eeSupported(): boolean {
 
 /**
  * Screen-share quality. LiveKit's default is 1080p at only 15 fps / 2.5 Mbps, so
- * we ask for 1080p60 instead. Capture and encoding are separate settings, and
- * both must allow 60 fps or the lower one wins.
+ * we ask for 1080p30 with far more bitrate. We favour a sharp picture over
+ * frame rate: at 30 fps each frame gets twice the bits it would at 60.
  *
- * 'motion' tells the encoder to favour smoothness (games, video).
+ * 'detail' tells the encoder to protect sharpness (text, fine detail).
  */
 const SCREEN_CAPTURE: ScreenShareCaptureOptions = {
   audio: true,
-  resolution: { width: 1920, height: 1080, frameRate: 60 },
-  contentHint: 'motion',
+  resolution: { width: 1920, height: 1080, frameRate: 30 },
+  contentHint: 'detail',
 };
 
 /**
- * The top layer is the full 1080p60. The extra 720p30 layer is simulcast: the
+ * The top layer is the full 1080p30. The extra 720p30 layer is simulcast: the
  * sharer uploads both, and the server sends each viewer the one that fits their
- * connection and tile size (small grid tile: 720p; focused share: 1080p60).
- * Nobody watching the small layer means it pauses, so it costs little.
+ * connection and tile size. Nobody watching a layer means it pauses, so it costs
+ * little. 720p gets 3 Mbps because LiveKit's 2 Mbps preset turned blocky on
+ * detailed motion in a live call.
  */
 const SCREEN_PUBLISH: TrackPublishOptions = {
-  screenShareEncoding: { maxBitrate: 8_000_000, maxFramerate: 60 },
+  screenShareEncoding: { maxBitrate: 8_000_000, maxFramerate: 30 },
   simulcast: true,
-  screenShareSimulcastLayers: [ScreenSharePresets.h720fps30],
+  screenShareSimulcastLayers: [new VideoPreset(1280, 720, 3_000_000, 30)],
 };
 
 /**
